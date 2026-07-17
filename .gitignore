@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.zip
+
+# Database and state files
+*.db
+*.sqlite
+dump.rdb
+
+# Credentials & secrets
+.env
+credentials.json
+token.json
+linkedin_state.json
+*secrets*
+
+# IDEs and Editors
+.vscode/
+.idea/
+.project
+.pydevproject
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+pytest.xml
+
+# Local packages & builds
+dist/
+build/
+*.egg-info/
+.eggs/
+
+# Benchmark and temporary residues
+gtm_engine/benchmark/benchmark_results.csv
+gtm_engine/benchmark/latency_chart.png

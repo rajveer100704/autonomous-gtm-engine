@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gtm
+      POSTGRES_PASSWORD: gtm
+      POSTGRES_DB: gtm
+    volumes:
+      - gtm_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    depends_on:
+      - db
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gtm:gtm@db:5432/gtm
+    ports:
+      - "8000:8000"
+
+  scheduler:
+    build: .
+    depends_on:
+      - db
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gtm:gtm@db:5432/gtm
+    command: ["python", "-m", "gtm_engine.scheduler"]
+
+  dashboard:
+    build: .
+    depends_on:
+      - db
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://gtm:gtm@db:5432/gtm
+    command: ["streamlit", "run", "gtm_engine/dashboard.py", "--server.address=0.0.0.0"]
+    ports:
+      - "8501:8501"
+
+volumes:
+  gtm_pgdata:

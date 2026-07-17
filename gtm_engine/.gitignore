@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment — NEVER commit .env
+.env
+.env.local
+.env.*.local
+
+# Credentials and secrets — NEVER commit
+credentials.json
+token.json
+browser/linkedin_state.json
+
+# Databases (local dev)
+gtm.db
+gtm.db-journal
+gtm.db-shm
+gtm.db-wal
+gtm_graph_state.db
+gtm_graph_state.db-journal
+
+# Test artifacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Distribution
+*.zip

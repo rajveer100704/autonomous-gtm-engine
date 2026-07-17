@@ -1,0 +1,952 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GTM Engine — Autonomous Outbound Pipeline</title>
+<meta name="description" content="Multi-agent GTM platform: lead discovery, grounded research, AI personalization, reflection-based quality control, adaptive sequencing, A/B experimentation, and execution tracing." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0E1114; --card: #181C21; --card-hover: #1E2329; --border: #252B33;
+    --text: #E6E5E2; --text-dim: #878C97; --text-muted: #555B66;
+    --amber: #F0AF54; --amber-dim: rgba(240,175,84,0.12); --amber-glow: rgba(240,175,84,0.2);
+    --teal: #30BF99; --teal-dim: rgba(48,191,153,0.1);
+    --orange: #D9923A; --red: #C05C4E; --red-dim: rgba(192,92,78,0.1);
+    --radius: 8px; --radius-lg: 12px;
+    --font: 'Geist', system-ui, sans-serif;
+    --mono: 'Geist Mono', 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:var(--font); font-size:14px; -webkit-font-smoothing:antialiased; line-height:1.5; }
+  ::selection{ background:var(--amber); color:#0E1114; }
+  a { color:inherit; text-decoration:none; }
+  .mono{ font-family:var(--mono); }
+  button{ font-family:var(--font); cursor:pointer; }
+
+  /* Layout */
+  .shell{ display:grid; grid-template-columns:216px 1fr; min-height:100vh; }
+
+  /* Sidebar */
+  .sidebar{
+    border-right:1px solid var(--border); padding:18px 10px;
+    display:flex; flex-direction:column;
+    position:sticky; top:0; height:100vh; overflow-y:auto;
+  }
+  .sidebar .logo{
+    font-weight:700; font-size:14px; letter-spacing:-0.02em;
+    padding:4px 10px 16px; display:flex; align-items:center; gap:8px;
+    color:var(--text);
+  }
+  .logo-mark{
+    width:20px; height:20px; border-radius:5px; background:var(--amber);
+    display:flex; align-items:center; justify-content:center;
+    font-size:10px; font-weight:700; color:#0E1114; letter-spacing:0; flex-shrink:0;
+  }
+
+  .nav-section{ font-size:10px; font-weight:600; color:var(--text-muted);
+    letter-spacing:0.08em; text-transform:uppercase; padding:10px 10px 4px; }
+
+  .nav-item{
+    display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px;
+    color:var(--text-dim); font-size:13px; font-weight:500; cursor:pointer; margin-bottom:1px;
+    transition:background 0.12s, color 0.12s;
+    position:relative;
+  }
+  .nav-item:hover{ background:var(--card-hover); color:var(--text); }
+  .nav-item.active{ background:var(--card); color:var(--text); }
+  .nav-item.active::before{
+    content:''; position:absolute; left:-10px; top:50%; transform:translateY(-50%);
+    width:3px; height:16px; border-radius:0 2px 2px 0; background:var(--amber);
+  }
+  .nav-icon{ width:14px; height:14px; flex-shrink:0; opacity:0.6; }
+  .nav-item.active .nav-icon{ opacity:1; }
+  .nav-item:hover .nav-icon{ opacity:0.9; }
+
+  .sidebar .spacer{ flex:1; }
+  .kbd-hint{
+    display:flex; align-items:center; justify-content:space-between; padding:7px 10px;
+    border:1px solid var(--border); border-radius:6px; font-size:11px; color:var(--text-dim);
+    cursor:pointer; margin-top:8px; transition:border-color 0.12s;
+  }
+  .kbd-hint:hover{ border-color:var(--amber); color:var(--text); }
+  .kbd-hint kbd{
+    font-family:var(--mono); background:var(--card); border:1px solid var(--border);
+    border-radius:3px; padding:1px 5px; font-size:10px;
+  }
+
+  /* Main */
+  .main{ padding:28px 36px 80px; max-width:1120px; }
+  .page-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:28px; }
+  .page-header h1{
+    font-weight:600; font-size:18px; letter-spacing:-0.02em; margin:0;
+  }
+  .header-right{ display:flex; align-items:center; gap:10px; }
+  .status{ display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-dim); }
+  .status-dot{ width:6px; height:6px; border-radius:50%; }
+  .status-dot.live{ background:var(--teal); animation:pulse-dot 2s ease-in-out infinite; }
+  .status-dot.down{ background:var(--red); }
+  @keyframes pulse-dot{
+    0%,100%{ box-shadow:0 0 0 0 rgba(48,191,153,0.4); }
+    50%{ box-shadow:0 0 0 4px rgba(48,191,153,0); }
+  }
+
+  .run-btn, .btn{
+    background:var(--amber); color:#0E1114; border:none; font-weight:600; font-size:12px;
+    padding:7px 14px; border-radius:6px; letter-spacing:-0.01em;
+    transition:filter 0.12s, transform 0.1s;
+  }
+  .btn.ghost{ background:transparent; color:var(--text); border:1px solid var(--border); }
+  .run-btn:hover, .btn:hover{ filter:brightness(1.08); }
+  .run-btn:active, .btn:active{ transform:scale(0.98); }
+
+  .api-input{
+    background:var(--card); border:1px solid var(--border); color:var(--text);
+    font-family:var(--mono); font-size:11px; padding:5px 9px; border-radius:6px; width:180px;
+    transition:border-color 0.12s;
+  }
+  .api-input:focus{ outline:none; border-color:var(--amber); }
+
+  /* KPI Cards */
+  .kpi-row{ display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; margin-bottom:18px; }
+  .kpi-card{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+    padding:14px 16px; transition:border-color 0.15s;
+    position:relative; overflow:hidden;
+  }
+  .kpi-card::before{
+    content:''; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,0.02),transparent);
+    transform:translateX(-100%); animation:shimmer 2.5s ease-in-out infinite;
+  }
+  @keyframes shimmer{
+    0%{ transform:translateX(-100%); }
+    60%,100%{ transform:translateX(100%); }
+  }
+  .kpi-card .l{ font-size:10px; color:var(--text-muted); margin-bottom:7px; font-weight:500; text-transform:uppercase; letter-spacing:0.05em; }
+  .kpi-card .v{ font-family:var(--mono); font-size:20px; font-weight:500; letter-spacing:-0.02em; }
+  .kpi-card .v.amber{ color:var(--amber); }
+  .kpi-card .v.teal{ color:var(--teal); }
+
+  /* Panels & Grids */
+  .row2{ display:grid; grid-template-columns:1.3fr 1fr; gap:14px; margin-bottom:14px; }
+  .row3{ display:grid; grid-template-columns:1fr 1.5fr 0.9fr; gap:14px; margin-bottom:14px; align-items:start; }
+  .panel{
+    background:var(--card); border:1px solid var(--border);
+    border-radius:var(--radius-lg); padding:18px 20px;
+  }
+  .panel h2{ font-weight:600; font-size:13px; letter-spacing:-0.01em; margin:0 0 2px; }
+  .panel .sub{ font-size:11px; color:var(--text-dim); margin-bottom:14px; }
+
+  /* Funnel */
+  .funnel-steps{ display:flex; align-items:stretch; }
+  .fstep{
+    flex:1; text-align:center; padding:10px 4px;
+    border-bottom:2px solid var(--border); position:relative;
+  }
+  .fstep:not(:last-child)::after{
+    content:'\2192'; position:absolute; right:-9px; top:50%; transform:translateY(-50%);
+    color:var(--text-muted); font-size:11px; z-index:1;
+  }
+  .fstep .n{ font-family:var(--mono); font-size:18px; font-weight:500; }
+  .fstep .l{ font-size:10px; color:var(--text-dim); margin-top:3px; text-transform:uppercase; letter-spacing:0.04em; }
+
+  /* Trace bars */
+  .trace-list{ display:flex; flex-direction:column; gap:9px; }
+  .trace-row{ display:flex; align-items:center; gap:10px; }
+  .trace-row .name{ width:108px; font-size:11px; color:var(--text-dim); flex-shrink:0; }
+  .trace-bar-track{ flex:1; background:#0A0C0F; border-radius:3px; height:6px; overflow:hidden; }
+  .trace-bar-fill{ height:100%; background:var(--amber); border-radius:3px; transition:width 0.4s ease; }
+  .trace-row .ms{ width:52px; font-family:var(--mono); font-size:10px; color:var(--text-dim); text-align:right; }
+  .trace-row .check{ width:14px; font-size:11px; text-align:center; flex-shrink:0; }
+
+  /* Bar charts */
+  .bar-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .bar-row .bl{ width:120px; font-size:11px; color:var(--text-dim); flex-shrink:0; }
+  .bar-track{ flex:1; background:#0A0C0F; border-radius:3px; height:8px; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:3px; transition:width 0.4s ease; }
+  .bar-val{ width:44px; font-family:var(--mono); font-size:10px; text-align:left; color:var(--text-dim); }
+
+  /* Chips */
+  .winner-chip{
+    display:inline-flex; align-items:center; gap:6px; background:var(--teal-dim);
+    border:1px solid var(--teal); color:var(--teal); font-size:11px;
+    padding:3px 9px; border-radius:20px; margin-bottom:12px;
+  }
+  .status-chip{
+    display:inline-block; font-size:10px; padding:2px 8px; border-radius:10px;
+    font-family:var(--mono); font-weight:500; letter-spacing:0.02em;
+  }
+  .status-chip.hot{ background:var(--amber-dim); color:var(--amber); }
+  .status-chip.sequenced, .status-chip.engaged{ background:var(--teal-dim); color:var(--teal); }
+  .status-chip.disqualified{ background:var(--red-dim); color:var(--red); }
+  .status-chip.nurture{ background:rgba(217,146,58,0.1); color:var(--orange); }
+  .status-chip.new{ background:#1a1e24; color:var(--text-dim); }
+
+  /* Tables */
+  table{ width:100%; border-collapse:collapse; font-size:12px; }
+  th{
+    text-align:left; color:var(--text-muted); font-weight:500;
+    padding:8px 10px; border-bottom:1px solid var(--border); font-size:10px;
+    text-transform:uppercase; letter-spacing:0.06em;
+  }
+  td{
+    padding:9px 10px; border-bottom:1px solid var(--border);
+    font-family:var(--mono); font-size:11px; vertical-align:top;
+  }
+  td:first-child{ font-family:var(--font); font-size:12px; }
+  tr.clickable{ cursor:pointer; }
+  tr.clickable:hover td{ background:rgba(255,255,255,0.02); }
+  .truncate{ max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* States */
+  .empty{ font-size:12px; color:var(--text-muted); padding:16px 0; }
+
+  /* Skeleton loader */
+  .skeleton{ display:flex; flex-direction:column; gap:10px; }
+  .skel-line{
+    height:12px; border-radius:4px;
+    background:linear-gradient(90deg, var(--card-hover) 25%, var(--border) 50%, var(--card-hover) 75%);
+    background-size:200% 100%; animation:skel-shimmer 1.5s infinite;
+  }
+  @keyframes skel-shimmer{
+    0%{ background-position:200% 0; }
+    100%{ background-position:-200% 0; }
+  }
+
+  /* Lead detail */
+  .field-row{
+    display:flex; justify-content:space-between; align-items:baseline;
+    padding:9px 0; border-bottom:1px solid var(--border); font-size:12px; gap:12px;
+  }
+  .field-row .k{ color:var(--text-dim); flex-shrink:0; }
+  .field-row .v{ font-family:var(--mono); font-size:11px; text-align:right; word-break:break-all; }
+
+  /* Hero lead detail banner */
+  .lead-hero{
+    background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg);
+    padding:20px 24px; margin-bottom:14px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px;
+  }
+  .lead-hero-left{ display:flex; flex-direction:column; gap:4px; }
+  .lead-hero-name{ font-size:20px; font-weight:600; letter-spacing:-0.03em; }
+  .lead-hero-sub{ font-size:12px; color:var(--text-dim); }
+  .lead-hero-right{ display:flex; gap:8px; align-items:center; }
+  .lead-badge{
+    display:inline-flex; align-items:center; gap:5px; background:var(--card-hover);
+    border:1px solid var(--border); border-radius:6px; padding:5px 10px; font-size:11px;
+    font-family:var(--mono);
+  }
+  .lead-badge.challenge{ background:rgba(240,175,84,0.06); border-color:rgba(240,175,84,0.25); color:var(--amber); }
+  .lead-badge.quality{ background:rgba(48,191,153,0.06); border-color:rgba(48,191,153,0.25); color:var(--teal); }
+
+  .msg-card{
+    background:#13171C; border:1px solid var(--border); border-radius:8px;
+    padding:14px 16px; margin-bottom:10px; font-size:12px;
+  }
+  .msg-card .subj{ font-weight:600; margin-bottom:6px; font-size:13px; }
+  .msg-card .body{ color:var(--text-dim); white-space:pre-wrap; line-height:1.6; }
+  .msg-card .meta{ font-family:var(--mono); font-size:10px; color:var(--text-muted); margin-top:8px; }
+
+  /* Timeline */
+  .timeline{ display:flex; flex-direction:column; gap:0; }
+  .tl-item{
+    display:flex; gap:12px; padding:9px 0 9px 20px;
+    border-left:2px solid var(--border); margin-left:5px;
+    position:relative;
+  }
+  .tl-item::before{
+    content:''; position:absolute; left:-5px; top:14px;
+    width:8px; height:8px; border-radius:50%;
+    background:var(--amber); border:2px solid var(--bg);
+  }
+  .tl-item.quality::before{ background:var(--teal); }
+  .tl-item.warn::before{ background:var(--orange); }
+  .tl-item .t{
+    font-family:var(--mono); font-size:10px; color:var(--text-muted);
+    width:72px; flex-shrink:0; margin-top:1px;
+  }
+  .tl-item .e{ font-size:12px; }
+
+  /* Section label */
+  .section-label{
+    font-size:10px; font-weight:600; color:var(--text-muted);
+    text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;
+  }
+
+  .challenge-list{ display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .challenge-item{
+    display:flex; gap:8px; align-items:flex-start;
+    background:var(--amber-dim); border:1px solid rgba(240,175,84,0.15);
+    border-radius:6px; padding:8px 10px; font-size:11px; line-height:1.4;
+  }
+  .challenge-dot{ width:5px; height:5px; border-radius:50%; background:var(--amber); margin-top:4px; flex-shrink:0; }
+
+  .evidence-item{ display:flex; gap:6px; align-items:flex-start; margin-bottom:5px; font-size:11px; }
+  .evidence-check{ color:var(--teal); font-size:12px; flex-shrink:0; }
+
+  .back-link{
+    font-size:11px; color:var(--text-muted); cursor:pointer; margin-bottom:16px;
+    display:inline-flex; align-items:center; gap:4px;
+    transition:color 0.12s;
+  }
+  .back-link:hover{ color:var(--text); }
+
+  /* Command palette */
+  .cmdk-overlay{
+    display:none; position:fixed; inset:0; background:rgba(7,8,11,.7);
+    backdrop-filter:blur(4px); z-index:100;
+    align-items:flex-start; justify-content:center; padding-top:12vh;
+  }
+  .cmdk-overlay.open{ display:flex; animation:fade-in 0.1s ease; }
+  @keyframes fade-in{ from{opacity:0; transform:translateY(-8px);} to{opacity:1; transform:translateY(0);} }
+  .cmdk{
+    background:var(--card); border:1px solid var(--border); border-radius:12px; width:520px;
+    box-shadow:0 24px 80px rgba(0,0,0,.5); overflow:hidden;
+  }
+  .cmdk input{
+    width:100%; background:transparent; border:none; border-bottom:1px solid var(--border);
+    color:var(--text); font-size:14px; padding:14px 16px; outline:none; box-sizing:border-box;
+    font-family:var(--font);
+  }
+  .cmdk input::placeholder{ color:var(--text-muted); }
+  .cmdk-item{
+    padding:10px 16px; font-size:13px; color:var(--text); cursor:pointer;
+    display:flex; justify-content:space-between; align-items:center;
+    transition:background 0.08s;
+  }
+  .cmdk-item:hover{ background:var(--card-hover); }
+  .cmdk-item .tag{ color:var(--text-muted); font-family:var(--mono); font-size:10px; }
+  .cmdk-section{ font-size:10px; color:var(--text-muted); padding:8px 16px 4px;
+    text-transform:uppercase; letter-spacing:0.07em; font-weight:600; }
+
+  footer{ font-size:10px; color:var(--text-muted); padding-top:12px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar" id="sidebar"></nav>
+  <main class="main" id="main"></main>
+</div>
+
+<div class="cmdk-overlay" id="cmdkOverlay" onclick="if(event.target===this) closeCmdk()">
+  <div class="cmdk">
+    <input id="cmdkInput" placeholder="Go to a page or run a command&hellip;" autocomplete="off" />
+    <div id="cmdkList"></div>
+  </div>
+</div>
+
+<script>
+const AMBER='#F0AF54', TEAL='#30BF99', ORANGE='#D9923A', RED='#C05C4E', DIM='#878C97';
+
+/* ── Navigation ─────────────────────────────────────────────── */
+const ROUTES = [
+  {id:'dashboard',       label:'Dashboard',         icon:'◈'},
+  {id:'campaigns',       label:'Campaigns',         icon:'⊞'},
+  {id:'leads',           label:'Leads',             icon:'◉'},
+  {id:'companies',       label:'Companies',         icon:'◫'},
+  {id:'research',        label:'Research',          icon:'◎'},
+  {id:'outreach',        label:'Outreach',          icon:'◌'},
+  {id:'analytics',       label:'Analytics',         icon:'▤'},
+  {id:'execution-trace', label:'Execution Trace',   icon:'⊘'},
+  {id:'queue',           label:'Execution Queue',   icon:'⊕'},
+  {id:'memory',          label:'Lead Memory',       icon:'◎'},
+];
+
+window._apiBase = 'http://localhost:8000';
+function setApiBase(v){ window._apiBase = v; }
+
+async function getJSON(path, opts){
+  const res = await fetch(window._apiBase + path, opts);
+  if(!res.ok) throw new Error(path + ' -> ' + res.status);
+  return res.json();
+}
+async function postJSON(path, body){
+  return getJSON(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body||{})});
+}
+
+function statusChip(status){
+  return '<span class="status-chip ' + (status||'new') + '">' + (status||'new') + '</span>';
+}
+
+function bar(container, rows, colorFor){
+  container.innerHTML = rows.map(function(r){
+    const pct = Math.max(0, Math.min(100, r.pct));
+    return '<div class="bar-row">' +
+      '<div class="bl">'+r.label+'</div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:'+pct+'%; background:'+colorFor(r)+'"></div></div>' +
+      '<div class="bar-val">'+r.valueLabel+'</div>' +
+    '</div>';
+  }).join('') || '<div class="empty">No data yet.</div>';
+}
+
+function skeletonLines(n){
+  return '<div class="skeleton">' +
+    Array.from({length:n}, function(_,i){
+      return '<div class="skel-line" style="width:'+(70+Math.random()*25).toFixed(0)+'%; animation-delay:'+i*0.08+'s"></div>';
+    }).join('') + '</div>';
+}
+
+function currentRoute(){
+  const hash = location.hash.replace('#/', '') || 'dashboard';
+  const parts = hash.split('/');
+  return {page: parts[0], param: parts[1]};
+}
+function navigate(route){ location.hash = '#/' + route; }
+
+function renderSidebar(){
+  const r = currentRoute();
+  const sidebar = document.getElementById('sidebar');
+
+  // Execution mode badge
+  const modeSafe = window._useGraph;
+  const modeBadge = '<div style="margin:8px 10px 0; padding:5px 8px; border-radius:6px; '+
+    'background:'+(modeSafe?'rgba(48,191,153,0.12)':'rgba(240,175,84,0.12)')+'; '+
+    'border:1px solid '+(modeSafe?'rgba(48,191,153,0.3)':'rgba(240,175,84,0.3)')+'; '+
+    'font-size:10px; font-weight:600; color:'+(modeSafe?'#30BF99':'#F0AF54')+'; '+
+    'display:flex; align-items:center; justify-content:space-between; cursor:pointer;" '+
+    'onclick="toggleExecutionMode()" title="Click to toggle execution mode">'+
+    '<span>'+(modeSafe?'⬡ LangGraph':'⬡ Linear')+'</span>'+
+    '<span style="opacity:0.6; font-weight:400">'+(modeSafe?'graph':'pipeline')+'</span>'+
+    '</div>';
+
+  sidebar.innerHTML =
+    '<div class="logo"><span class="logo-mark">G</span>GTM Engine</div>' +
+    modeBadge +
+    '<div class="nav-section">Pipeline</div>' +
+    ROUTES.slice(0,3).map(navItem.bind(null,r)).join('') +
+    '<div class="nav-section">Data</div>' +
+    ROUTES.slice(3,6).map(navItem.bind(null,r)).join('') +
+    '<div class="nav-section">Intelligence</div>' +
+    ROUTES.slice(6,8).map(navItem.bind(null,r)).join('') +
+    '<div class="nav-section">Execution</div>' +
+    ROUTES.slice(8).map(navItem.bind(null,r)).join('') +
+    '<div class="spacer"></div>' +
+    navItem(r, {id:'settings', label:'Settings', icon:'⊛'}) +
+    '<div class="kbd-hint" onclick="openCmdk()">Search or run <kbd>&#8984;K</kbd></div>';
+}
+
+function navItem(r, item){
+  return '<div class="nav-item ' + (item.id===r.page?'active':'') + '" onclick="navigate(\''+item.id+'\')">' +
+    '<span style="font-size:11px;opacity:0.7">'+item.icon+'</span>' +
+    item.label + '</div>';
+}
+
+async function router(){
+  renderSidebar();
+  const r = currentRoute();
+  const main = document.getElementById('main');
+  main.innerHTML = '<div class="empty">Loading&hellip;</div>';
+  try{
+    if(r.page === 'leads' && r.param){ await renderLeadDetail(main, r.param); return; }
+    const pages = {
+      dashboard: renderDashboard, campaigns: renderCampaigns, leads: renderLeads,
+      companies: renderCompanies, research: renderResearch, outreach: renderOutreach,
+      analytics: renderAnalytics, 'execution-trace': renderExecutionTrace, settings: renderSettings,
+    };
+    const fn = pages[r.page] || renderDashboard;
+    await fn(main, r.param);
+  }catch(e){
+    console.error(e);
+    main.innerHTML = '<div class="empty">Could not load &mdash; is the API running at '+window._apiBase+'? ('+e.message+')</div>';
+  }
+}
+window.addEventListener('hashchange', router);
+
+/* ── Shared header ──────────────────────────────────────────── */
+function pageHeader(title, extraHtml){
+  return '<div class="page-header"><h1>'+title+'</h1>' +
+    '<div class="header-right">' +
+      '<div class="status"><span class="status-dot down" id="statusDot"></span><span id="statusLabel">checking&hellip;</span></div>' +
+      '<input class="api-input" id="apiBaseInput" value="'+window._apiBase+'" spellcheck="false" onchange="setApiBase(this.value); router();" />' +
+      (extraHtml||'') +
+    '</div></div>';
+}
+
+async function pingStatus(){
+  const dot = document.getElementById('statusDot'), label = document.getElementById('statusLabel');
+  if(!dot) return;
+  try{ await getJSON('/health'); dot.className='status-dot live'; label.textContent='connected'; }
+  catch(e){ dot.className='status-dot down'; label.textContent='offline'; }
+}
+
+/* ── Dashboard ──────────────────────────────────────────────── */
+async function renderDashboard(main){
+  main.innerHTML =
+    pageHeader('Overview', '<button class="run-btn" onclick="runCampaign()">Run campaign</button>') +
+    '<div class="kpi-row" id="kpiRow">' +
+      ['Leads sourced','Emails sent','Reply rate','Meetings','Token cost','Health'].map(function(l,i){
+        const cls = i===2 ? 'amber' : (i===3 ? 'teal' : '');
+        return '<div class="kpi-card"><div class="l">'+l+'</div><div class="v '+cls+'">&mdash;</div></div>';
+      }).join('') +
+    '</div>' +
+    '<div class="row2">' +
+      '<div class="panel"><h2>Pipeline</h2><div class="sub">leads by funnel stage, this run</div>' +
+      '<div class="funnel-steps" id="funnel"><div class="empty">Run a campaign to populate.</div></div></div>' +
+      '<div class="panel"><h2>Agent Trace</h2><div class="sub">latest run &mdash; avg latency per step</div>' +
+      '<div class="trace-list" id="traceList"><div class="empty">No spans yet.</div></div></div>' +
+    '</div>' +
+    '<footer>reads /analytics, /observability &mdash; read-only console, no auth in dev mode</footer>';
+  await pingStatus();
+
+  let funnel = {}, costs = null, latency = {};
+  try{ funnel = await getJSON('/analytics/funnel'); }catch(e){}
+  try{ costs = await getJSON('/analytics/costs'); }catch(e){}
+  try{ latency = await getJSON('/observability/latency'); }catch(e){}
+
+  const stages = ['lead_sourced','email_sent','email_opened','email_replied','meeting_booked','won'];
+  const labels = {lead_sourced:'Sourced', email_sent:'Sent', email_opened:'Opened',
+                   email_replied:'Replied', meeting_booked:'Meeting', won:'Won'};
+  document.getElementById('funnel').innerHTML = stages.map(function(s){
+    return '<div class="fstep"><div class="n">'+(funnel[s]||0)+'</div><div class="l">'+labels[s]+'</div></div>';
+  }).join('');
+
+  const sent = funnel.email_sent||0, replied = funnel.email_replied||0, meetings = funnel.meeting_booked||0;
+  const replyRate = sent ? (replied/sent*100) : 0;
+  const health = sent ? Math.min(100, replyRate*1.2 + (meetings/sent*100)*1.5) : 0;
+  const kpis = document.querySelectorAll('#kpiRow .kpi-card .v');
+  kpis[0].textContent = funnel.lead_sourced || 0;
+  kpis[1].textContent = sent;
+  kpis[2].textContent = replyRate.toFixed(1)+'%';
+  kpis[3].textContent = meetings;
+  kpis[4].textContent = costs ? '$'+costs.total_cost_usd.toFixed(4) : '\u2014';
+  kpis[5].textContent = sent ? Math.round(health)+'/100' : '\u2014';
+
+  const traceOrder = ['research','pain_point','email','reflect','email_rewrite','linkedin'];
+  const maxMs = Math.max(1, ...traceOrder.map(function(a){ return (latency[a]||{}).avg_ms||0; }));
+  document.getElementById('traceList').innerHTML = traceOrder.filter(function(a){ return latency[a]; }).map(function(a){
+    const s = latency[a]; const pct = (s.avg_ms/maxMs)*100; const ok = s.failures===0;
+    return '<div class="trace-row"><div class="name">'+a+'</div>' +
+      '<div class="trace-bar-track"><div class="trace-bar-fill" style="width:'+pct+'%"></div></div>' +
+      '<div class="ms">'+s.avg_ms+'ms</div><div class="check" style="color:'+(ok?TEAL:RED)+'">'+(ok?'\u2713':'\u2715')+'</div></div>';
+  }).join('') || '<div class="empty">No spans yet.</div>';
+}
+
+window._useGraph = false; // toggle: false=linear, true=langgraph
+function toggleExecutionMode(){
+  window._useGraph = !window._useGraph;
+  renderSidebar();
+}
+
+async function runCampaign(){
+  const btn = document.querySelector('.run-btn');
+  if(btn){ btn.textContent='Running\u2026'; btn.disabled=true; }
+  try{
+    await postJSON('/run-campaign', {
+      max_leads: 4,
+      use_graph: window._useGraph,
+      objective: 'Book Demo',
+    });
+    await router();
+  }
+  catch(e){ console.error(e); if(btn){ btn.textContent='Run campaign'; btn.disabled=false; } }
+}
+async function evaluateAB(){
+  try{ await postJSON('/analytics/ab-test/evaluate', {}); await router(); }
+  catch(e){ console.error(e); }
+}
+
+/* ── Campaigns ──────────────────────────────────────────────── */
+async function renderCampaigns(main){
+  main.innerHTML = pageHeader('Campaigns', '<button class="run-btn" onclick="runCampaign()">Run campaign</button>') +
+    '<div class="panel"><h2>Runs so far</h2>' +
+    '<div class="sub">one implicit ICP/campaign &mdash; grouped by day sourced</div>' +
+    '<table id="campTable"><thead><tr><th>date</th><th>leads sourced</th><th>sent</th><th>replied</th><th>meetings</th></tr></thead><tbody>'+skeletonLines(1)+'</tbody></table></div>';
+  await pingStatus();
+  let leads=[], funnel={};
+  try{ leads = await getJSON('/leads'); }catch(e){}
+  try{ funnel = await getJSON('/analytics/funnel'); }catch(e){}
+  const byDay={};
+  leads.forEach(function(l){
+    const day = (l.created_at||'').slice(0,10)||'unknown';
+    byDay[day] = byDay[day]||{leads:0};
+    byDay[day].leads += 1;
+  });
+  const tbody = document.querySelector('#campTable tbody');
+  const rows = Object.entries(byDay).sort().reverse();
+  tbody.innerHTML = rows.map(function(entry){
+    const day=entry[0], stats=entry[1];
+    return '<tr><td>'+day+'</td><td>'+stats.leads+'</td><td>'+(funnel.email_sent||0)+'</td><td>'+(funnel.email_replied||0)+'</td><td>'+(funnel.meeting_booked||0)+'</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty">No campaigns run yet.</td></tr>';
+}
+
+/* ── Leads list ─────────────────────────────────────────────── */
+async function renderLeads(main){
+  main.innerHTML = pageHeader('Leads') +
+    '<div class="panel"><h2>All leads</h2><div class="sub">click a row to open the full lead detail</div>' +
+    '<table id="leadsTable"><thead><tr><th>name</th><th>company</th><th>title</th><th>variant</th><th>status</th></tr></thead><tbody>'+skeletonLines(2)+'</tbody></table></div>';
+  await pingStatus();
+  let leads=[];
+  try{ leads = await getJSON('/leads'); }catch(e){}
+  document.querySelector('#leadsTable tbody').innerHTML = leads.map(function(l){
+    return '<tr class="clickable" onclick="navigate(\'leads/'+l.id+'\')">' +
+      '<td>'+escHtml(l.full_name||'')+'</td><td>'+escHtml(l.company||'')+'</td><td>'+escHtml(l.title||'')+'</td>' +
+      '<td class="v-'+l.id+'">&mdash;</td><td>'+statusChip(l.status)+'</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty">No leads yet &mdash; run a campaign.</td></tr>';
+
+  try{
+    const outreach = await getJSON('/outreach');
+    const variantByLead={};
+    outreach.forEach(function(o){ if(o.channel==='email'&&o.sequence_step===0&&o.variant) variantByLead[o.lead_id]=o.variant; });
+    leads.forEach(function(l){
+      const cell = document.querySelector('.v-'+l.id);
+      if(cell) cell.textContent = variantByLead[l.id] || '\u2014';
+    });
+  }catch(e){}
+}
+
+/* ── Lead Detail (hero page) ────────────────────────────────── */
+async function renderLeadDetail(main, leadId){
+  main.innerHTML = '<div class="empty">Loading lead&hellip;</div>';
+  let detail;
+  try{ detail = await getJSON('/leads/'+leadId); }
+  catch(e){ main.innerHTML='<div class="empty">Could not load lead '+leadId+'.</div>'; return; }
+  if(detail.error){ main.innerHTML='<div class="empty">'+detail.error+'</div>'; return; }
+
+  const lead = detail.lead;
+  const painPoints = (detail.pain_points && (detail.pain_points.pain_points||'').split('; ').filter(Boolean)) || [];
+  const confColor = detail.research
+    ? (detail.research.confidence==='high' ? TEAL : (detail.research.confidence==='medium' ? ORANGE : DIM))
+    : DIM;
+
+  main.innerHTML =
+    pageHeader('Lead Detail') +
+    '<div class="back-link" onclick="navigate(\'leads\')">&#8592; back to leads</div>' +
+
+    /* Hero banner */
+    '<div class="lead-hero">' +
+      '<div class="lead-hero-left">' +
+        '<div class="lead-hero-name">'+escHtml(lead.full_name||'Unknown Contact')+'</div>' +
+        '<div class="lead-hero-sub">'+escHtml(lead.title||'')+(lead.company?' &mdash; <strong>'+escHtml(lead.company)+'</strong>':'')+'</div>' +
+      '</div>' +
+      '<div class="lead-hero-right">' +
+        (painPoints.length ? '<span class="lead-badge challenge">'+painPoints.length+' challenges detected</span>' : '') +
+        (detail.research ? '<span class="lead-badge quality">'+detail.research.confidence+' confidence</span>' : '') +
+        statusChip(lead.status) +
+      '</div>' +
+    '</div>' +
+
+    '<div class="row3">' +
+      /* Column 1: Company info */
+      '<div class="panel"><h2>'+escHtml(lead.company||'Company')+'</h2><div class="sub">'+escHtml(lead.domain||'')+'</div>' +
+        fieldRow('Contact', lead.full_name) +
+        fieldRow('Title', lead.title) +
+        fieldRow('Email', lead.email) +
+        fieldRow('Size', (lead.company_size_bucket||'—')) +
+        fieldRow('Status', statusChip(lead.status)) +
+      '</div>' +
+
+      /* Column 2: Research + Detected Business Challenges */
+      '<div class="panel"><h2>Research</h2><div class="sub">grounded via Tavily, cached per-domain</div>' +
+        (detail.research ? (
+          '<div style="margin-bottom:12px; font-size:12px; line-height:1.6;">'+escHtml(detail.research.company_summary)+'</div>' +
+          '<div class="section-label">Recent Signals</div>' +
+          '<div style="margin-bottom:14px;">' +
+            (detail.research.recent_signals||'').split('; ').filter(Boolean).map(function(s){
+              return '<div class="evidence-item"><span class="evidence-check">&#8250;</span><span style="font-size:11px;">'+escHtml(s)+'</span></div>';
+            }).join('') +
+          '</div>' +
+          '<div class="section-label">Evidence Sources</div>' +
+          '<div style="margin-bottom:14px;">' +
+            (detail.research.sources||'').split('; ').filter(Boolean).map(function(s){
+              const parts=s.split('|'); const title=parts[0]||'source'; const url=parts[1]||'';
+              return '<div class="evidence-item"><span class="evidence-check" style="color:'+TEAL+'">&#10003;</span>' +
+                '<span style="font-size:11px;">'+escHtml(title)+(url?' <span style="color:'+DIM+'; font-family:var(--mono); font-size:10px;">('+escHtml(url)+')</span>':'')+'</span></div>';
+            }).join('') +
+          '</div>' +
+          (painPoints.length ? (
+            '<div class="section-label">Detected Business Challenges' +
+              (detail.pain_points.confidence ? ' <span style="color:'+confColor+'; font-family:var(--mono);">'+detail.pain_points.confidence+'</span>' : '') +
+            '</div>' +
+            '<div class="challenge-list">' +
+              painPoints.map(function(p){ return '<div class="challenge-item"><div class="challenge-dot"></div><span>'+escHtml(p)+'</span></div>'; }).join('') +
+            '</div>'
+          ) : '')
+        ) : '<div class="empty">No research yet.</div>') +
+      '</div>' +
+
+      /* Column 3: Outreach */
+      '<div class="panel"><h2>Outreach</h2><div class="sub">generated messages</div>' +
+        detail.outreach.filter(function(o){return o.sequence_step===0;}).map(function(o){
+          const channel = o.channel==='email' ? 'Email' : 'LinkedIn';
+          return '<div class="msg-card"><div class="subj">'+(o.subject ? escHtml(o.subject) : channel)+'</div>' +
+            '<div class="body">'+escHtml((o.body||'').slice(0,240))+((o.body||'').length>240?'\u2026':'')+'</div>' +
+            '<div class="meta">'+o.channel+(o.variant?' &middot; Variant '+o.variant:'')+'&nbsp;&middot;&nbsp;'+o.status+'</div>' +
+          '</div>';
+        }).join('') || '<div class="empty">No outreach yet.</div>' +
+      '</div>' +
+    '</div>' +
+
+    /* Full-width timeline */
+    '<div class="panel"><h2>Full Timeline</h2><div class="sub">every agent step and funnel event for this lead, in order</div>' +
+      '<div class="timeline">' +
+        buildMergedTimeline(detail).map(function(item){
+          return '<div class="tl-item '+(item.isQuality?'quality':'')+(item.isWarn?'warn':'')+'">' +
+            '<div class="t">'+item.time+'</div>' +
+            '<div class="e">'+item.label+
+              (item.tag ? ' <span style="font-family:var(--mono); color:'+item.tagColor+'; font-size:10px;">'+item.tag+'</span>' : '') +
+            '</div></div>';
+        }).join('') ||
+        '<div class="empty">No timeline yet.</div>' +
+      '</div>' +
+    '</div>';
+  await pingStatus();
+}
+
+function fieldRow(k, v){
+  return '<div class="field-row"><span class="k">'+k+'</span><span class="v">'+escHtml(String(v||'—'))+'</span></div>';
+}
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* Timeline labels (renamed) */
+function buildMergedTimeline(detail){
+  const traceLabels = {
+    research:'Research completed', pain_point:'Detected business challenges',
+    email:'Email generated', reflect:'Quality review passed',
+    email_rewrite:'Email rewritten (quality review)', linkedin:'LinkedIn message generated'
+  };
+  const eventLabels = {
+    lead_sourced:'Lead sourced', email_sent:'Email sent', linkedin_sent:'LinkedIn sent',
+    email_opened:'Email opened', email_replied:'Reply received',
+    meeting_booked:'Meeting booked', won:'Deal won'
+  };
+  const items=[];
+  (detail.trace||[]).forEach(function(s){
+    const ok = s.success===1;
+    const isQuality = s.agent==='reflect' || s.agent==='email_rewrite';
+    items.push({
+      time:(s.created_at||'').replace('T',' ').slice(5,16),
+      raw_time:s.created_at||'',
+      label:traceLabels[s.agent]||s.agent,
+      tag:ok ? s.duration_ms+'ms' : 'failed',
+      tagColor:ok?TEAL:RED,
+      isQuality:isQuality && ok,
+      isWarn:!ok,
+    });
+  });
+  (detail.events||[]).forEach(function(e){
+    items.push({
+      time:(e.created_at||'').replace('T',' ').slice(5,16),
+      raw_time:e.created_at||'',
+      label:eventLabels[e.event_type]||e.event_type,
+      tag:e.event_metadata||'',
+      tagColor:DIM,
+    });
+  });
+  items.sort(function(a,b){ return a.raw_time < b.raw_time ? -1 : 1; });
+  return items;
+}
+
+/* ── Companies ──────────────────────────────────────────────── */
+async function renderCompanies(main){
+  main.innerHTML = pageHeader('Companies') +
+    '<div class="panel"><h2>All companies</h2><div class="sub">aggregated from sourced leads</div>' +
+    '<table id="compTable"><thead><tr><th>company</th><th>domain</th><th>leads</th><th>latest status</th></tr></thead><tbody>'+skeletonLines(1)+'</tbody></table></div>';
+  await pingStatus();
+  let companies=[];
+  try{ companies = await getJSON('/companies'); }catch(e){}
+  document.querySelector('#compTable tbody').innerHTML = companies.map(function(c){
+    return '<tr><td>'+escHtml(c.company||'')+'</td><td>'+escHtml(c.domain||'')+'</td><td>'+c.lead_count+'</td><td>'+statusChip(c.latest_status)+'</td></tr>';
+  }).join('') || '<tr><td colspan="4" class="empty">No companies yet.</td></tr>';
+}
+
+/* ── Research ───────────────────────────────────────────────── */
+async function renderResearch(main){
+  main.innerHTML = pageHeader('Research') +
+    '<div class="panel"><h2>Cached research</h2><div class="sub">Tavily-grounded, cached per domain &mdash; confidence reflects how many claims are backed by search results</div>' +
+    '<table id="researchTable"><thead><tr><th>domain</th><th>summary</th><th>confidence</th><th>evidence</th><th>fetched</th></tr></thead><tbody>'+skeletonLines(2)+'</tbody></table></div>';
+  await pingStatus();
+  let rows=[];
+  try{ rows = await getJSON('/research'); }catch(e){}
+  document.querySelector('#researchTable tbody').innerHTML = rows.map(function(r){
+    const srcCount = (r.sources||'').split(';').filter(function(s){return s.trim();}).length;
+    const confColor = r.confidence==='high'?TEAL:(r.confidence==='medium'?ORANGE:DIM);
+    return '<tr><td>'+escHtml(r.domain)+'</td><td class="truncate" title="'+escHtml(r.summary||'')+'">'+escHtml(r.summary||'')+'</td>' +
+      '<td style="color:'+confColor+'; font-family:var(--mono);">'+(r.confidence||'\u2014')+'</td>' +
+      '<td>'+srcCount+' source'+(srcCount===1?'':'s')+'</td>' +
+      '<td>'+(r.fetched_at||'').replace('T',' ').slice(0,16)+'</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty">No research cached yet.</td></tr>';
+}
+
+/* ── Outreach ───────────────────────────────────────────────── */
+async function renderOutreach(main){
+  main.innerHTML = pageHeader('Outreach') +
+    '<div class="panel"><h2>All outreach</h2><div class="sub">drafted, scheduled, sent, cancelled</div>' +
+    '<table id="outreachTable"><thead><tr><th>lead</th><th>channel</th><th>step</th><th>variant</th><th>status</th><th>subject / preview</th></tr></thead><tbody>'+skeletonLines(2)+'</tbody></table></div>';
+  await pingStatus();
+  let rows=[];
+  try{ rows = await getJSON('/outreach'); }catch(e){}
+  document.querySelector('#outreachTable tbody').innerHTML = rows.map(function(o){
+    const preview = o.subject || (o.body||'').slice(0,60);
+    return '<tr class="clickable" onclick="navigate(\'leads/'+o.lead_id+'\')">' +
+      '<td>#'+o.lead_id+'</td><td>'+o.channel+'</td><td>'+o.sequence_step+'</td><td>'+(o.variant||'\u2014')+'</td>' +
+      '<td>'+o.status+'</td><td class="truncate">'+escHtml(preview)+'</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="empty">No outreach yet.</td></tr>';
+}
+
+/* ── Analytics ──────────────────────────────────────────────── */
+async function renderAnalytics(main){
+  main.innerHTML = pageHeader('Analytics', '<button class="btn ghost" onclick="evaluateAB()">Evaluate A/B</button>') +
+    '<div class="row2">' +
+      '<div class="panel"><h2>A/B &mdash; email copy</h2><div class="sub">direct vs. curiosity hook, by reply rate</div>' +
+        '<div id="abWinner"></div><div id="abBars"><div class="empty">No data yet.</div></div></div>' +
+      '<div class="panel"><h2>Reply classification</h2><div class="sub">what\'s driving adaptive follow-ups</div>' +
+        '<div id="replyBars"><div class="empty">No data yet.</div></div></div>' +
+    '</div>' +
+    '<div class="panel"><h2>Cost by agent</h2><div class="sub">Gemini token spend</div>' +
+    '<table id="costTable"><thead><tr><th>agent</th><th>calls</th><th>tokens</th><th>cost</th></tr></thead><tbody></tbody></table></div>';
+  await pingStatus();
+
+  try{
+    const ab = await getJSON('/analytics/ab-test');
+    const winnerDiv = document.getElementById('abWinner');
+    if(ab.active_winner){
+      const v = Number(ab.active_winner.value);
+      winnerDiv.innerHTML = '<div class="winner-chip">&#9679; Variant '+ab.active_winner.variant+' promoted &mdash; '+ab.active_winner.metric+' '+(isNaN(v)?ab.active_winner.value:v.toFixed(3))+'</div>';
+    }
+    const rows = Object.entries(ab.performance||{}).map(function(entry){
+      const v=entry[0], s=entry[1];
+      return {label:'Variant '+v, pct:(s.reply_rate||0)*100, valueLabel:((s.reply_rate||0)*100).toFixed(1)+'%'};
+    });
+    bar(document.getElementById('abBars'), rows, function(r){ return r.label.indexOf('A')>-1 ? AMBER : TEAL; });
+  }catch(e){}
+
+  try{
+    const replies = await getJSON('/analytics/replies');
+    const total = Object.values(replies).reduce(function(a,b){return a+b;},0)||1;
+    const colorMap = {interested:TEAL, meeting_request:TEAL, needs_more_info:ORANGE,
+                       not_now:ORANGE, out_of_office:DIM, not_interested:RED, unsubscribe:RED};
+    const rows = Object.entries(replies).map(function(entry){
+      const k=entry[0], v=entry[1];
+      return {label:k, pct:(v/total)*100, valueLabel:v, color:colorMap[k]||DIM};
+    });
+    bar(document.getElementById('replyBars'), rows, function(r){ return r.color; });
+  }catch(e){}
+
+  try{
+    const costs = await getJSON('/analytics/costs');
+    document.querySelector('#costTable tbody').innerHTML = Object.entries(costs.by_agent||{}).map(function(entry){
+      const agent=entry[0], s=entry[1];
+      return '<tr><td>'+agent+'</td><td>'+s.calls+'</td><td>'+(s.input_tokens+s.output_tokens)+'</td><td>$'+s.cost_usd.toFixed(5)+'</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty">No usage yet.</td></tr>';
+  }catch(e){}
+}
+
+/* ── Execution Trace (renamed from Observability) ───────────── */
+async function renderExecutionTrace(main){
+  main.innerHTML = pageHeader('Execution Trace') +
+    '<div class="panel" style="margin-bottom:14px;"><h2>Latency by agent</h2><div class="sub">all runs &mdash; avg / max / failures</div>' +
+    '<table id="latencyTable"><thead><tr><th>agent</th><th>calls</th><th>avg</th><th>max</th><th>fail</th></tr></thead><tbody>'+skeletonLines(1)+'</tbody></table></div>' +
+    '<div class="panel"><h2>Trace explorer</h2><div class="sub">look up one lead\'s full span timeline</div>' +
+    '<div style="display:flex; gap:8px; margin-bottom:14px;">' +
+      '<input class="api-input" id="traceLeadId" placeholder="lead id" style="width:100px;" />' +
+      '<button class="btn ghost" onclick="loadTrace()">Load trace</button>' +
+    '</div>' +
+    '<div id="traceExplorer"><div class="empty">Enter a lead id above.</div></div></div>';
+  await pingStatus();
+  let latency={};
+  try{ latency = await getJSON('/observability/latency'); }catch(e){}
+  document.querySelector('#latencyTable tbody').innerHTML = Object.entries(latency).map(function(entry){
+    const agent=entry[0], s=entry[1];
+    const ok = s.failures===0;
+    return '<tr><td>'+agent+'</td><td>'+s.calls+'</td>' +
+      '<td style="color:'+(s.avg_ms>2000?ORANGE:TEAL)+'">'+s.avg_ms+'ms</td>' +
+      '<td>'+s.max_ms+'ms</td>' +
+      '<td style="color:'+(ok?DIM:RED)+'">'+s.failures+'</td></tr>';
+  }).join('') || '<tr><td colspan="5" class="empty">No spans yet.</td></tr>';
+}
+
+async function loadTrace(){
+  const id = document.getElementById('traceLeadId').value;
+  if(!id) return;
+  const el = document.getElementById('traceExplorer');
+  el.innerHTML = '<div class="empty">Loading&hellip;</div>';
+  try{
+    const trace = await getJSON('/observability/trace/'+id);
+    const maxMs = Math.max(1, ...trace.map(function(s){ return s.duration_ms||0; }));
+    el.innerHTML = trace.map(function(s){
+      const ok = s.success===1;
+      const pct = Math.min(100, (s.duration_ms/maxMs)*100);
+      return '<div class="trace-row" style="margin-bottom:10px;">' +
+        '<div class="name">'+s.agent+'</div>' +
+        '<div class="trace-bar-track"><div class="trace-bar-fill" style="width:'+pct+'%"></div></div>' +
+        '<div class="ms">'+s.duration_ms+'ms</div>' +
+        '<div class="check" style="color:'+(ok?TEAL:RED)+'">'+(ok?'\u2713':'\u2715')+'</div>' +
+      '</div>';
+    }).join('') || '<div class="empty">No spans for that lead.</div>';
+  }catch(e){ el.innerHTML='<div class="empty">Could not load trace.</div>'; }
+}
+
+/* ── Settings ───────────────────────────────────────────────── */
+async function renderSettings(main){
+  main.innerHTML = pageHeader('Settings') +
+    '<div class="panel"><h2>Runtime config</h2><div class="sub">read-only snapshot &mdash; edit via .env, not here</div>' +
+    '<div id="settingsFields"></div></div>';
+  await pingStatus();
+  let s={};
+  try{ s = await getJSON('/settings'); }catch(e){}
+  const rows=[
+    ['Mock mode', s.mock_mode],
+    ['Sender name', s.sender_name],
+    ['Sender company', s.sender_company],
+    ['Product pitch', s.sender_product_pitch],
+    ['Follow-up delay (days)', s.follow_up_delay_days],
+    ['Max follow-ups', s.max_follow_ups],
+    ['Research cache TTL (hrs)', s.research_cache_ttl_hours],
+    ['ICP titles', (s.icp_titles||[]).join(', ')],
+    ['ICP industries', (s.icp_industries||[]).join(', ')],
+    ['Database', s.database_url_kind],
+  ];
+  document.getElementById('settingsFields').innerHTML = rows.map(function(r){
+    return fieldRow(r[0], r[1]);
+  }).join('');
+}
+
+/* ── Command palette ────────────────────────────────────────── */
+function buildCmdkList(){
+  const items=ROUTES.map(function(r){ return {label:'Go to '+r.label, tag:'page', action:function(){ navigate(r.id); }}; });
+  items.push({label:'Run campaign (4 leads)', tag:'action', action:runCampaign});
+  items.push({label:'Evaluate A/B winner', tag:'action', action:evaluateAB});
+  items.push({label:'Go to Settings', tag:'page', action:function(){ navigate('settings'); }});
+  return items;
+}
+function openCmdk(){
+  const overlay = document.getElementById('cmdkOverlay');
+  overlay.classList.add('open');
+  const input = document.getElementById('cmdkInput');
+  input.value=''; input.focus();
+  renderCmdkList(buildCmdkList());
+}
+function closeCmdk(){ document.getElementById('cmdkOverlay').classList.remove('open'); }
+function renderCmdkList(items){
+  const groups={page:[],action:[]};
+  items.forEach(function(it){ (groups[it.tag]||groups.page).push(it); });
+  let html='';
+  if(groups.action.length){ html+='<div class="cmdk-section">Actions</div>'+groups.action.map(cmdkItem).join(''); }
+  if(groups.page.length){ html+='<div class="cmdk-section">Pages</div>'+groups.page.map(cmdkItem).join(''); }
+  document.getElementById('cmdkList').innerHTML = html;
+  window._cmdkItems = items;
+  document.querySelectorAll('.cmdk-item').forEach(function(el){
+    el.onclick = function(){ window._cmdkItems[+el.dataset.i].action(); closeCmdk(); };
+  });
+}
+function cmdkItem(it, i){
+  return '<div class="cmdk-item" data-i="'+i+'"><span>'+it.label+'</span><span class="tag">'+it.tag+'</span></div>';
+}
+document.addEventListener('input', function(e){
+  if(e.target.id==='cmdkInput'){
+    const q = e.target.value.toLowerCase();
+    renderCmdkList(buildCmdkList().filter(function(it){ return it.label.toLowerCase().indexOf(q)>-1; }));
+  }
+});
+document.addEventListener('keydown', function(e){
+  if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==='k'){ e.preventDefault(); openCmdk(); }
+  if(e.key==='Escape') closeCmdk();
+});
+
+router();
+setInterval(function(){ if(currentRoute().page==='dashboard') router(); }, 15000);
+</script>
+</body>
+</html>

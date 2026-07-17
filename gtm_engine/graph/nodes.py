@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime
 import logging
+from gtm_engine.config import settings
 
 log = logging.getLogger("gtm.graph.nodes")
 

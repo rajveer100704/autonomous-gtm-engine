@@ -77,7 +77,6 @@ def goal_manager_node(state: dict) -> dict:
     )
     
     # Initialize the budget limit
-    global budget_manager
     budget_manager.limit = goal.budget
     
     log.info("GoalManager: structured Goal initialized. Objective: %r, Budget: $%f", goal.objective, goal.budget)

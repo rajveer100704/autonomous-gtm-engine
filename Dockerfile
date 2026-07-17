@@ -5,7 +5,7 @@ WORKDIR /app
 COPY gtm_engine/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY gtm_engine ./gtm_engine
+COPY . .
 
 ENV PYTHONUNBUFFERED=1
 

@@ -11,6 +11,7 @@ dump.rdb
 
 # Credentials & secrets
 .env
+render.env
 credentials.json
 token.json
 linkedin_state.json

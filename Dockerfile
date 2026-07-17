@@ -11,4 +11,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "gtm_engine.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn gtm_engine.api:app --host 0.0.0.0 --port ${PORT:-8000}"]

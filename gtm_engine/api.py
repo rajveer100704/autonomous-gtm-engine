@@ -7,8 +7,9 @@ POST /run-followups  -> fires any due follow-ups (call this from a cron trigger)
 """
 from contextlib import asynccontextmanager
 import datetime
+import hmac
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -79,6 +80,11 @@ class TrackEventRequest(BaseModel):
     is_simulated: bool = False
 
 
+class ProviderTestSendRequest(BaseModel):
+    outreach_id: int
+    decision_id: int
+
+
 def _dry_run_sender(outreach_row: dict) -> dict:
     """
     Placeholder transport: logs instead of actually sending. Swap for a real
@@ -129,9 +135,20 @@ def run_followups():
 
 
 @app.post("/events/track")
-def track_event(req: TrackEventRequest):
-    """Record a general event and optionally a strictly attributed learning outcome."""
+def track_event(req: TrackEventRequest, request: Request = None):
+    """Record an internal event; production calls require a shared internal token.
+
+    Public provider callbacks must use /webhooks/sendgrid/events, which verifies
+    the provider's signature over the original raw body.
+    """
     from gtm_engine.config import settings
+    if not settings.mock_mode:
+        expected = settings.internal_event_token
+        supplied = request.headers.get("X-GTM-Event-Token", "") if request is not None else ""
+        if not expected:
+            raise HTTPException(status_code=503, detail="Internal event ingestion is disabled: token not configured")
+        if not supplied or not hmac.compare_digest(supplied, expected):
+            raise HTTPException(status_code=403, detail="Forbidden")
     lead = db.get_lead(req.lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -198,6 +215,144 @@ def track_event(req: TrackEventRequest):
         "attribution_status": learning_status, "learning_outcome": learning_result,
         "adaptive_followup": adaptive_result,
     }
+
+
+@app.post("/webhooks/sendgrid/events")
+async def sendgrid_events_webhook(request: Request):
+    """Receive SendGrid events only after verifying the exact raw body signature."""
+    from gtm_engine.providers.sendgrid_webhooks import (
+        SIGNATURE_HEADER, TIMESTAMP_HEADER, process_events, verify_signature,
+    )
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
+    raw_body = await request.body()
+    if len(raw_body) > 2 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Webhook payload too large")
+    if not verify_signature(
+        raw_body, request.headers.get(SIGNATURE_HEADER), request.headers.get(TIMESTAMP_HEADER)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or missing SendGrid webhook signature")
+    import json
+    try:
+        events_payload = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
+    if not isinstance(events_payload, list) or any(not isinstance(item, dict) for item in events_payload):
+        raise HTTPException(status_code=400, detail="Expected a JSON array of event objects")
+    try:
+        summary = process_events(events_payload)
+    except Exception as exc:
+        # Avoid returning internal exception details to the provider or caller.
+        raise HTTPException(status_code=500, detail="Transient webhook processing failure") from exc
+    return {"status": "accepted", **summary}
+
+
+@app.post("/webhooks/sendgrid/inbound")
+async def sendgrid_inbound_reply_webhook(request: Request):
+    """Receive actual email replies through a signature-secured Inbound Parse hook."""
+    from gtm_engine.providers.sendgrid_webhooks import (
+        SIGNATURE_HEADER, TIMESTAMP_HEADER, verify_signature,
+    )
+    from gtm_engine.providers.sendgrid_inbound import process_inbound_reply
+    content_length = request.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Inbound message too large")
+    raw_body = await request.body()
+    if len(raw_body) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Inbound message too large")
+    from gtm_engine.config import settings
+    if not verify_signature(
+        raw_body, request.headers.get(SIGNATURE_HEADER), request.headers.get(TIMESTAMP_HEADER),
+        public_key_override=settings.sendgrid_inbound_webhook_public_key,
+    ):
+        raise HTTPException(status_code=403, detail="Invalid or missing SendGrid inbound signature")
+    content_type = request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        raise HTTPException(status_code=400, detail="Expected multipart/form-data")
+    try:
+        result = process_inbound_reply(raw_body, content_type)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Transient inbound reply processing failure") from exc
+    return {"status": "accepted", **result}
+
+
+@app.post("/provider/send-test")
+def send_provider_test_email(
+    req: ProviderTestSendRequest, authorization: str | None = Header(default=None),
+):
+    """One-message staging smoke test; not a campaign endpoint.
+
+    Requires GTM_MOCK_MODE=false, ENABLE_PROVIDER_SENDS=true, an auth token, and
+    an exact recipient allowlist. Each attempt transitions the outreach to
+    'sending' before the network call to prevent accidental duplicate sends.
+    """
+    from gtm_engine.config import settings
+    if settings.mock_mode or not settings.enable_provider_sends:
+        raise HTTPException(status_code=403, detail="Provider sending is disabled")
+    if not settings.provider_send_auth_token:
+        raise HTTPException(status_code=503, detail="Provider send token is not configured")
+    supplied = (authorization or "").removeprefix("Bearer ").strip()
+    if not supplied or not hmac.compare_digest(supplied, settings.provider_send_auth_token):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not settings.provider_test_allowed_recipients:
+        raise HTTPException(status_code=503, detail="No provider test recipients are allowlisted")
+    if not settings.sendgrid_reply_to_domain or not settings.sendgrid_reply_token_secret:
+        raise HTTPException(status_code=503, detail="Signed SendGrid reply routing is not configured")
+    if not settings.sendgrid_api_key or not settings.sendgrid_from_email:
+        raise HTTPException(status_code=503, detail="SendGrid API key or verified sender address is not configured")
+    decision = db.get_decision(req.decision_id)
+    outreach_row = next((row for row in db.all_outreach() if row["id"] == req.outreach_id), None)
+    if not decision or not outreach_row:
+        raise HTTPException(status_code=404, detail="Outreach or decision not found")
+    if (decision.get("outreach_id") != req.outreach_id
+            or decision.get("lead_id") != outreach_row.get("lead_id")
+            or decision.get("decision_type") != "email_style"
+            or outreach_row.get("channel") != "email"
+            or outreach_row.get("sequence_step") != 0):
+        raise HTTPException(status_code=400, detail="Decision must match the exact first-touch email outreach")
+    lead = db.get_lead(outreach_row["lead_id"])
+    recipient = (lead or {}).get("email", "")
+    if not recipient or recipient.lower() not in settings.provider_test_allowed_recipients:
+        raise HTTPException(status_code=403, detail="Outreach recipient is not on the provider test allowlist")
+    if outreach_row.get("status") not in {"drafted", "scheduled"} or outreach_row.get("sent_at") is not None:
+        raise HTTPException(status_code=409, detail="Outreach is not an unsent draft/scheduled item")
+
+    # Claim before calling the provider. If the process crashes during the API call,
+    # the row remains 'sending' and must be reconciled manually before retrying.
+    db.update_outreach_status(req.outreach_id, "sending")
+    from gtm_engine.executors.sendgrid_executor import send_email
+    from gtm_engine.providers.sendgrid_webhooks import make_reply_to_address
+    result = send_email(
+        recipient, outreach_row.get("subject") or "", outreach_row.get("body") or "",
+        custom_args={"lead_id": outreach_row["lead_id"], "outreach_id": req.outreach_id,
+                     "decision_id": req.decision_id, "campaign_run_id": decision.get("campaign_run_id")},
+        reply_to=make_reply_to_address(outreach_row["lead_id"], req.outreach_id, req.decision_id),
+    )
+    if not result.get("success") or result.get("mock"):
+        db.update_outreach_status(req.outreach_id, "send_failed")
+        raise HTTPException(status_code=502, detail={"error": "Provider did not accept the staging send",
+                                                      "error_code": result.get("error_code", "unexpected_mock_result")})
+    sent_at = datetime.datetime.now(datetime.timezone.utc)
+    db.update_outreach_status(req.outreach_id, "sent", sent_at=sent_at)
+    db.record_event(outreach_row["lead_id"], "email_sent", f"provider=sendgrid;outreach_id={req.outreach_id};decision_id={req.decision_id}")
+    return {"status": "provider_accepted", "provider": "sendgrid",
+            "outreach_id": req.outreach_id, "decision_id": req.decision_id,
+            "message_id": result.get("message_id")}
+
+
+@app.get("/health/ready")
+def readiness():
+    """Readiness probe that verifies database connectivity, not merely process liveness."""
+    try:
+        with db.engine.connect() as conn:
+            conn.exec_driver_sql("SELECT 1")
+        return {"status": "ready", "database": "reachable",
+                "database_url_kind": "postgres" if "postgres" in str(db.engine.url) else "sqlite"}
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database is not ready") from exc
 
 
 @app.get("/analytics/replies")

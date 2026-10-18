@@ -10,7 +10,7 @@ import re
 
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, Integer, String, Text, DateTime,
-    ForeignKey, select, update, JSON, Float
+    ForeignKey, select, update, JSON, Float, UniqueConstraint
 )
 
 from gtm_engine.config import settings
@@ -205,8 +205,110 @@ learning_promotions = Table(
 )
 
 
+# Durable inbox for authenticated provider events. Only hashes and normalized
+# metadata are stored; raw webhook bodies and email addresses are never persisted.
+provider_event_receipts = Table(
+    "provider_event_receipts", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("provider", String, nullable=False),
+    Column("provider_event_id", String, nullable=False),
+    Column("provider_event_type", String, nullable=False),
+    Column("payload_sha256", String, nullable=False),
+    Column("lead_id", Integer, nullable=True),
+    Column("outreach_id", Integer, nullable=True),
+    Column("decision_id", Integer, nullable=True),
+    Column("status", String, nullable=False, default="pending"),
+    Column("error_code", String, nullable=True),
+    Column("created_at", DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)),
+    Column("processed_at", DateTime, nullable=True),
+    UniqueConstraint("provider", "provider_event_id", name="uq_provider_event_receipt"),
+)
+
+
 def init_db():
+    # Additive schema initialization: existing data/tables are preserved.
+    # New tables, including provider_event_receipts, are created on upgrade.
     metadata.create_all(engine)
+
+
+def create_or_get_provider_receipt(
+    provider: str, provider_event_id: str, provider_event_type: str, payload_sha256: str,
+    lead_id: int | None = None, outreach_id: int | None = None, decision_id: int | None = None,
+) -> dict:
+    """Durably register a provider event before processing it; safe for retries.
+
+    A pending/failed receipt can be resumed after a process crash. The unique
+    provider/event key prevents duplicate receipt rows across concurrent retries.
+    """
+    if not provider or not provider_event_id:
+        raise ValueError("provider and provider_event_id are required")
+    values = {
+        "provider": provider, "provider_event_id": provider_event_id,
+        "provider_event_type": provider_event_type or "unknown", "payload_sha256": payload_sha256,
+        "lead_id": lead_id, "outreach_id": outreach_id, "decision_id": decision_id,
+        "status": "pending", "created_at": datetime.datetime.now(datetime.timezone.utc),
+    }
+    with engine.begin() as conn:
+        existing = conn.execute(
+            select(provider_event_receipts).where(
+                provider_event_receipts.c.provider == provider,
+                provider_event_receipts.c.provider_event_id == provider_event_id,
+            ).with_for_update()
+        ).mappings().first()
+        if existing:
+            return {"receipt": dict(existing), "created": False}
+
+        dialect = conn.dialect.name
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+        else:
+            dialect_insert = None
+        if dialect_insert:
+            result = conn.execute(
+                dialect_insert(provider_event_receipts).values(**values)
+                .on_conflict_do_nothing(index_elements=["provider", "provider_event_id"])
+            )
+            created = bool(result.rowcount)
+        else:
+            try:
+                conn.execute(provider_event_receipts.insert().values(**values))
+                created = True
+            except Exception:
+                # Non-PostgreSQL/SQLite fallback; re-query after the insert conflict.
+                created = False
+        row = conn.execute(
+            select(provider_event_receipts).where(
+                provider_event_receipts.c.provider == provider,
+                provider_event_receipts.c.provider_event_id == provider_event_id,
+            ).with_for_update()
+        ).mappings().first()
+        if row is None:
+            raise RuntimeError("provider event receipt insert did not persist")
+        return {"receipt": dict(row), "created": created}
+
+
+def update_provider_receipt(receipt_id: int, status: str, error_code: str | None = None) -> None:
+    if status not in {"pending", "processed", "ignored", "failed"}:
+        raise ValueError(f"Invalid provider receipt status: {status}")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    values = {"status": status, "error_code": error_code}
+    if status in {"processed", "ignored"}:
+        values["processed_at"] = now
+    with engine.begin() as conn:
+        conn.execute(
+            update(provider_event_receipts).where(provider_event_receipts.c.id == receipt_id).values(**values)
+        )
+
+
+def list_provider_receipts(provider: str = "sendgrid") -> list[dict]:
+    with engine.begin() as conn:
+        rows = conn.execute(
+            select(provider_event_receipts).where(provider_event_receipts.c.provider == provider)
+            .order_by(provider_event_receipts.c.id.asc())
+        ).mappings().all()
+        return [dict(row) for row in rows]
 
 
 def insert_lead(lead: dict) -> int:
@@ -945,12 +1047,42 @@ def record_learning_outcome(
             return {"status": "duplicate", "outcome_id": existing["id"], "event_key": event_key,
                     "event_type": existing["event_type"], "lead_id": lead_id,
                     "outreach_id": outreach_id, "decision_id": decision_id}
-        res = conn.execute(learning_outcomes.insert().values(
+        values = dict(
             event_key=event_key, decision_id=decision_id, outreach_id=outreach_id,
             lead_id=lead_id, event_type=event_type, occurred_at=occ_ts, recorded_at=rec_ts,
             source=source, is_simulated=1 if is_simulated else 0,
             value_numeric=value_numeric, currency=currency, metadata_json=metadata or {},
-        ))
+        )
+        # ON CONFLICT closes the SELECT-then-INSERT race when a provider retries
+        # the same event concurrently on PostgreSQL or SQLite.
+        if conn.dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        elif conn.dialect.name == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+        else:
+            dialect_insert = None
+        if dialect_insert:
+            res = conn.execute(
+                dialect_insert(learning_outcomes).values(**values)
+                .on_conflict_do_nothing(index_elements=["event_key"])
+            )
+            if res.rowcount:
+                return {"status": "recorded", "outcome_id": res.inserted_primary_key[0], "event_key": event_key,
+                        "event_type": event_type, "lead_id": lead_id, "outreach_id": outreach_id,
+                        "decision_id": decision_id}
+            existing = conn.execute(
+                select(learning_outcomes).where(learning_outcomes.c.event_key == event_key)
+            ).mappings().first()
+            if existing is None:
+                raise RuntimeError("outcome conflict occurred but existing event could not be loaded")
+            same = (existing["decision_id"] == decision_id and existing["outreach_id"] == outreach_id
+                    and existing["lead_id"] == lead_id and existing["event_type"] == event_type)
+            if not same:
+                raise ValueError("event_key was already used for a different outcome")
+            return {"status": "duplicate", "outcome_id": existing["id"], "event_key": event_key,
+                    "event_type": existing["event_type"], "lead_id": lead_id,
+                    "outreach_id": outreach_id, "decision_id": decision_id}
+        res = conn.execute(learning_outcomes.insert().values(**values))
         return {"status": "recorded", "outcome_id": res.inserted_primary_key[0], "event_key": event_key,
                 "event_type": event_type, "lead_id": lead_id, "outreach_id": outreach_id,
                 "decision_id": decision_id}

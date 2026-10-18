@@ -25,6 +25,18 @@ class Settings:
     gmail_credentials_path: str = os.getenv("GMAIL_CREDENTIALS_PATH", "credentials.json")
     # SendGrid: alternative to Gmail for transactional email
     sendgrid_api_key: str = os.getenv("SENDGRID_API_KEY", "")
+    sendgrid_from_email: str = os.getenv("SENDGRID_FROM_EMAIL", "")
+    sendgrid_webhook_public_key: str = os.getenv("SENDGRID_WEBHOOK_PUBLIC_KEY", "")
+    sendgrid_inbound_webhook_public_key: str = os.getenv("SENDGRID_INBOUND_WEBHOOK_PUBLIC_KEY", "")
+    sendgrid_reply_to_domain: str = os.getenv("SENDGRID_REPLY_TO_DOMAIN", "")
+    sendgrid_reply_token_secret: str = os.getenv("SENDGRID_REPLY_TOKEN_SECRET", "")
+    # Real sends are independently gated; mock mode alone never authorizes sends.
+    enable_provider_sends: bool = os.getenv("ENABLE_PROVIDER_SENDS", "false").lower() == "true"
+    provider_send_auth_token: str = os.getenv("PROVIDER_SEND_AUTH_TOKEN", "")
+    provider_test_allowed_recipients: tuple = tuple(
+        x.strip().lower() for x in os.getenv("PROVIDER_TEST_ALLOWED_RECIPIENTS", "").split(",") if x.strip()
+    )
+    internal_event_token: str = os.getenv("GTM_INTERNAL_EVENT_TOKEN", "")
 
     # ── LinkedIn browser automation ──────────────────────────────────────
     # Used by linkedin_executor.py (Playwright). Not LinkedIn's official API.

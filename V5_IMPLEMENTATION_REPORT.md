@@ -2,15 +2,15 @@
 
 ## Validation performed
 
-Validation was run against the repository snapshot in this package, in an isolated Linux/Python environment. It has not yet been run inside the user's Windows checkout.
+The base V5 implementation was validated in the repository checkout. This follow-up patch adds signed SendGrid event ingestion, signed inbound-reply attribution, an explicitly gated one-message staging sender, and PostgreSQL integration coverage.
 
-- `python -m compileall -q gtm_engine` — passed.
-- `GTM_MOCK_MODE=true USE_REDIS=false USE_OTEL=false python -m pytest -q` — **121 passed, 0 failed**.
-- `python -m gtm_engine.optimization.report --seed 20261019` — completed and wrote the JSON and Markdown reports under `reports/`.
-- Repeated the benchmark twice with the same seed into separate output directories; JSON and Markdown outputs were byte-identical.
-- API smoke checks passed for `/optimization/recommendation` and `/analytics/outcome-feedback`, both at root routes and `/api/v1` aliases.
+- `python -m compileall -q gtm_engine` — passed after the follow-up patch.
+- `GTM_MOCK_MODE=true USE_REDIS=false USE_OTEL=false python -m pytest -q` — **133 passed, 0 failed** after adding provider/security tests.
+- The PostgreSQL integration suite is implemented in `gtm_engine/tests/postgres_integration.py` and is wired to a PostgreSQL 16 CI service. It was **not executed in this isolated environment**, where Docker/PostgreSQL are unavailable. Run it locally or verify the GitHub Actions job before claiming PostgreSQL validation passed.
+- A live SendGrid send/event callback/inbound-reply cycle requires staging credentials, a public HTTPS deployment, separate provider webhook verification keys, and Inbound Parse DNS/MX configuration; it was **not executed here**.
+- The synthetic benchmark remains synthetic; no real campaign uplift is claimed.
 
-The full test run emitted 72 non-fatal warnings, principally SQLite's deprecated default datetime adapter and uses of `datetime.utcnow()` in older tests. They did not cause test failures.
+The SQLite test run emitted 72 non-fatal warnings, principally the deprecated SQLite datetime adapter and legacy uses of `datetime.utcnow()`. They did not cause test failures.
 
 ## Main implementation areas
 
@@ -43,6 +43,6 @@ The equal-effect negative control had a mean segment-aware reply-rate difference
 
 - The uploaded snapshot did not include a `.git` directory, so repository-relative `git diff --check` and a push were not performed in this environment.
 - Existing non-fatal datetime deprecation warnings remain.
-- Real campaign data, external provider webhooks, and production PostgreSQL migration behavior were not tested against live services. New tables are additive, but validate any deployment-specific database behavior before rollout.
-- No real outbound messages were sent by the tests or simulator.
-- No changes were pushed to GitHub. Review the package and merge it into the user's existing Git checkout, preserving `.git` and local credentials.
+- Real provider callbacks and production/staging deployment behavior remain unverified until the runbook's live checks complete. The PostgreSQL CI job must pass before claiming PostgreSQL integration verification.
+- No real outbound messages were sent by the tests or simulator. The staging-only `/provider/send-test` endpoint is disabled by default and requires an exact allowlist.
+- This follow-up package is not yet committed or pushed. Apply it to the existing Git checkout while preserving `.git` and local credentials, run the local PostgreSQL suite, and push only after review/validation.

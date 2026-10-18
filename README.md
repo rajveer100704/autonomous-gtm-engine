@@ -150,3 +150,8 @@ python -m gtm_engine.optimization.report --seed 20261019
 ```
 
 Benchmark output is synthetic and must not be described as real-world uplift. The policy-quality benchmark is separate from infrastructure/queue throughput benchmarks. For attribution semantics and API routes, see [the GTM Engine README](gtm_engine/README.md#v5-outcome-driven-feedback-loop).
+
+
+## V5 production validation
+
+For signed SendGrid Event Webhooks, signed Inbound Parse reply attribution, the one-message staging smoke-send endpoint, and mandatory PostgreSQL integration tests, follow [`PRODUCTION_VALIDATION_RUNBOOK.md`](PRODUCTION_VALIDATION_RUNBOOK.md). Keep provider sends disabled outside staging and do not interpret simulator results as real campaign uplift.

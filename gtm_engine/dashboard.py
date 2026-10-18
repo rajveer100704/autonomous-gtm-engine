@@ -24,7 +24,7 @@ with st.sidebar:
         st.success(f"Sequenced {len(results)} leads")
 
     st.divider()
-    st.caption("Demo only — simulates opens/replies/meetings so the funnel below has data.")
+    st.caption("Synthetic demo only — general funnel events only; these events are not eligible for V5 learning.")
     if st.button("Simulate engagement (demo)"):
         import random
         leads = db.all_leads()
@@ -104,20 +104,59 @@ with tab4:
 
     st.subheader("A/B test — email copy")
     from gtm_engine.agents import ab_test as ab_test_module
-    winner = db.get_active_winner()
+    winner = db.get_validated_active_winner()
     if winner:
-        st.success(f"Variant **{winner['variant']}** promoted as winner "
-                   f"({winner['metric']} = {winner['value']}) — now sent to ~80% of new leads.")
+        st.success(f"V5-validated variant **{winner['variant']}** is active under the 80/20 exploration policy.")
     else:
-        st.info("No winner promoted yet — evenly splitting new leads across variants A/B.")
+        st.info("No V5-validated winner yet — new assignments remain randomized 50/50.")
 
     if st.button("Evaluate & promote winner"):
         decision = ab_test_module.evaluate_and_promote()
         if decision["decided"]:
-            st.success(f"Promoted variant {decision['winner']} ({decision['metric']} = {decision['value']}, "
-                       f"{decision['margin']}x margin)")
+            margin_text = f"{decision['margin']}x reply-rate ratio" if decision.get("margin") is not None else "runner-up reply rate was zero"
+            st.success(f"Validated variant {decision['winner']} ({decision['metric']} = {decision['value']}; {margin_text})")
         else:
             st.warning(decision["reason"])
+
+    st.divider()
+    st.subheader("Outcome Feedback — V5")
+    st.caption("Real attributed outcomes only. Lead-level legacy events and synthetic demo events are excluded from optimization evidence.")
+    from gtm_engine.optimization.feedback import OutcomeFeedbackService
+    try:
+        feedback_summary = OutcomeFeedbackService.get_dataset_summary()
+        recommendation = OutcomeFeedbackService.get_recommendation()
+        cohort = feedback_summary["cohort"]
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Decisions", cohort["total_decisions"])
+        m2.metric("Sent exposures", cohort["sent_exposures"])
+        m3.metric("Mature exposures", cohort["mature_exposures"])
+        m4.metric("Unattributed events excluded", cohort["unattributed_events_count"])
+        st.write("**Variant evidence (mature, explicitly attributed first-touch emails)**")
+        rows = []
+        for variant, values in feedback_summary["variants"].items():
+            rows.append({
+                "Variant": variant, "Style": values["action_value"],
+                "Mature sent": values["mature_sent"], "Replies": values["counts"]["replied"],
+                "Reply rate": values["rates"]["reply_rate"], "Reply 95% CI": values["rates"]["reply_ci"],
+                "Meetings": values["counts"]["meetings"], "Wins": values["counts"]["won"],
+                "Bounces": values["counts"]["bounced"], "Unsubscribes": values["counts"]["unsubscribed"],
+            })
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        st.write("**Recommendation (advisory; no automatic sending or promotion)**")
+        st.json(recommendation)
+        if feedback_summary["data_quality_warnings"]:
+            for warning in feedback_summary["data_quality_warnings"]:
+                st.warning(warning)
+        else:
+            st.info("No current attribution-quality warnings.")
+        if st.button("Evaluate evidence and validate promotion", key="v5_evaluate_promotion"):
+            decision = ab_test_module.evaluate_and_promote()
+            if decision.get("decided"):
+                st.success(f"Validated recommendation: variant {decision['winner']} — {decision.get('reason', '')}")
+            else:
+                st.warning(decision.get("reason", "Insufficient evidence"))
+    except Exception as exc:
+        st.warning(f"Outcome feedback is unavailable until the V5 schema/data are initialized: {exc}")
 
     perf = db.variant_performance()
     if perf:

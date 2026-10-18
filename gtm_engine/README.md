@@ -136,3 +136,14 @@ To validate chaos recovery:
 ```powershell
 python -m gtm_engine.chaos.chaos_test
 ```
+
+
+## V5 Outcome-Driven Feedback Loop
+
+V5 persists each first-touch email-style decision and its exact outreach ID, then records outcomes only when the outcome can be explicitly attributed to that decision. The default attribution window is 14 days; only eligible sent exposures that have reached the end of this window enter mature-cohort metrics. Lead-only legacy events remain available to funnel analytics but are not inferred onto a variant.
+
+The primary metric is mature attributed email-reply rate. Meeting and win rates are reported separately; bounce and unsubscribe rates are safety guardrails. Promotion requires minimum sample sizes, a 95% Newcombe/Wilson difference interval excluding zero, a configurable practical lift, and safety checks. Recommendations are advisory; evaluation is an explicit operator action. Synthetic simulator outcomes are not real-world evidence and are excluded from production analysis by default.
+
+Run tests from the repository root with `python -m pytest gtm_engine/tests -q`. Run the deterministic local policy benchmark with `python -m gtm_engine.optimization.report --seed 20261019`. It writes `reports/outcome_feedback_benchmark.json` and `.md`; this policy-quality benchmark is separate from the queue throughput benchmark.
+
+API surfaces: `GET /analytics/outcome-feedback`, `GET /optimization/recommendation`, and `POST /optimization/evaluate`. The existing `/events/track` request shape remains valid; learning attribution requires a verified outreach/decision link.

@@ -14,7 +14,7 @@ This document outlines the architectural maturity model of the GTM Engine, track
 | **V4.1** | **Observability & Decoupling** | Feature flags, unified ObservabilityService, Domain Event Bus, API versioning | Traceable, decoupled core |
 | **V4.2** | **Distributed Platform** | Redis Streams, Queue Adapters, Goal Manager, MCP Tool Registry | Observable, horizontally scalable execution |
 | **V4.3** | **Enterprise SaaS** | JWT Auth, RBAC, workspaces/organizations, Admin Ops Center | Multi-tenant SaaS platform |
-| **V5** | **Autonomous Revenue OS**| Closed-loop ReAct loops, self-optimizing business KPIs | Goal-driven self-improving platform |
+| **V5** | **Outcome-Driven Feedback Loop** | Explicit decision/outcome attribution, mature-cohort analysis, conservative policy gates, deterministic simulator | Implemented with advisory recommendations; see V5 tests and benchmark caveats |
 
 ---
 
@@ -101,5 +101,5 @@ This document outlines the architectural maturity model of the GTM Engine, track
 
 ## 6. V5 — Autonomous Revenue OS
 The final maturity stage transitions the system from an execution workflow into a **closed-loop self-improving platform**:
-- **Continuous Optimization:** The platform analyzes which industries/personas respond to which pitches.
-- **Feedback Loop:** Automatically updates the campaign planner's prompt strategy to maximize meetings booked without manual configuration.
+- **Continuous Optimization:** The platform evaluates which first-touch email styles perform better using mature, explicitly attributed outcomes.
+- **Feedback Loop:** The system produces an evidence-backed advisory recommendation. Live traffic allocation and campaign prompts are not changed automatically; a validated operator action is required for promotion.

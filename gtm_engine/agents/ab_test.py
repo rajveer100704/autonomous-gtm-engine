@@ -1,70 +1,84 @@
 """
-A/B testing for first-touch email copy. Two concerns, kept separate:
+A/B testing for first-touch email copy.
 
-1. assign_variant() — which variant does THIS lead get? 50/50 explore until
-   a winner is declared, then an explore/exploit split (80% winner, 20%
-   the other) so we keep collecting signal on the loser instead of fully
-   committing — a real GTM team wouldn't want a "winner" locked in forever
-   off a small early sample.
-
-2. evaluate_and_promote() — looks at crm.db.variant_performance() and
-   decides whether one variant has pulled ahead with enough samples to
-   act on. Call this periodically (e.g. from the scheduler, or a
-   dashboard button) — it's cheap and idempotent.
+V5 Closed-Loop Feedback Integration:
+1. assign_variant_with_probability() — selects variant and records exact assignment propensity
+   (50/50 randomized exploration by default, or 80/20 explore/exploit split if a validated
+   winner has been promoted).
+2. assign_variant() — backwards-compatible signature returning a string variant ('A' or 'B').
+3. evaluate_and_promote() — evaluates mature, explicitly attributed outcomes using conservative
+   statistical (Wilson difference) and safety guardrail gates. Idempotent.
 """
-import random
-from gtm_engine.crm import db
+from __future__ import annotations
 
-EXPLOIT_WINNER_PROBABILITY = 0.8
-MIN_SAMPLE_PER_VARIANT = 10        # don't call a winner off a handful of sends
-MIN_LEAD_MARGIN = 1.2              # winner must beat runner-up by >=20% on the metric
-DECISION_METRIC = "reply_rate"     # what "better" means for this test
+import datetime
+from typing import Any
+
+from gtm_engine.crm import db
+from gtm_engine.optimization.policy import (
+    GlobalBestPolicy,
+    VARIANT_STYLES,
+    POLICY_VERSION,
+    EXPLOIT_PROBABILITY,
+    EXPLORE_PROBABILITY,
+)
+from gtm_engine.optimization.feedback import OutcomeFeedbackService
+
+EXPLOIT_WINNER_PROBABILITY = EXPLOIT_PROBABILITY
+MIN_SAMPLE_PER_VARIANT = 30         # Conservative minimum hygiene sample (configurable)
+MIN_LEAD_MARGIN = 1.2              # Backwards-compatible margin alias
+MIN_PRACTICAL_LIFT = 0.02           # 2 percentage points minimum lift
+ATTRIBUTION_WINDOW_DAYS = 14        # Mature attribution window in days
+DECISION_METRIC = "reply_rate"     # Optimization objective
+
+
+def assign_variant_with_probability(
+    test_name: str = "email_copy_v1",
+    segment_key: str = "all",
+    context: dict | None = None,
+) -> dict[str, Any]:
+    """
+    Selects variant and returns full policy assignment metadata including exact
+    assignment probability (propensity).
+    """
+    winner_row = db.get_validated_active_winner(test_name)
+    winner = winner_row["variant"] if winner_row else None
+    assignment = GlobalBestPolicy.assign(
+        active_winner=winner,
+        segment_key=segment_key,
+        context=context,
+    )
+    return assignment.to_dict()
 
 
 def assign_variant(test_name: str = "email_copy_v1") -> str:
-    winner_row = db.get_active_winner(test_name)
-    if not winner_row:
-        return random.choice(["A", "B"])
-
-    winner = winner_row["variant"]
-    loser = "B" if winner == "A" else "A"
-    return winner if random.random() < EXPLOIT_WINNER_PROBABILITY else loser
+    """
+    Backwards-compatible variant assignment returning 'A' or 'B'.
+    """
+    res = assign_variant_with_probability(test_name=test_name)
+    return res["variant"]
 
 
-def evaluate_and_promote(test_name: str = "email_copy_v1") -> dict:
-    performance = db.variant_performance()
-    if len(performance) < 2:
-        return {"decided": False, "reason": "need both variants represented", "performance": performance}
+def evaluate_and_promote(
+    test_name: str = "email_copy_v1",
+    min_sample: int | None = None,
+    min_lift: float | None = None,
+    attribution_window_days: int | None = None,
+    now: datetime.datetime | None = None,
+) -> dict[str, Any]:
+    """
+    Evaluates strategy performance on mature, explicitly attributed outcomes.
+    Promotes winner to ab_winner only if statistical confidence and safety gates pass.
+    Idempotent: does not append duplicate winner rows on repeated evaluations.
+    """
+    sample_req = min_sample if min_sample is not None else MIN_SAMPLE_PER_VARIANT
+    lift_req = min_lift if min_lift is not None else MIN_PRACTICAL_LIFT
+    window = attribution_window_days if attribution_window_days is not None else ATTRIBUTION_WINDOW_DAYS
 
-    under_sample = [v for v, stats in performance.items() if stats["sent"] < MIN_SAMPLE_PER_VARIANT]
-    if under_sample:
-        return {
-            "decided": False,
-            "reason": f"variant(s) {under_sample} below min sample size ({MIN_SAMPLE_PER_VARIANT})",
-            "performance": performance,
-        }
-
-    ranked = sorted(performance.items(), key=lambda kv: kv[1][DECISION_METRIC], reverse=True)
-    (top_variant, top_stats), (second_variant, second_stats) = ranked[0], ranked[1]
-
-    if second_stats[DECISION_METRIC] == 0:
-        margin = float("inf") if top_stats[DECISION_METRIC] > 0 else 1.0
-    else:
-        margin = top_stats[DECISION_METRIC] / second_stats[DECISION_METRIC]
-
-    if margin < MIN_LEAD_MARGIN:
-        return {
-            "decided": False,
-            "reason": f"lead ({margin:.2f}x) below required margin ({MIN_LEAD_MARGIN}x)",
-            "performance": performance,
-        }
-
-    db.set_winner(top_variant, DECISION_METRIC, top_stats[DECISION_METRIC], test_name)
-    return {
-        "decided": True,
-        "winner": top_variant,
-        "metric": DECISION_METRIC,
-        "value": top_stats[DECISION_METRIC],
-        "margin": round(margin, 2),
-        "performance": performance,
-    }
+    return OutcomeFeedbackService.evaluate_and_promote(
+        test_name=test_name,
+        min_sample_per_variant=sample_req,
+        min_practical_lift=lift_req,
+        attribution_window_days=window,
+        now=now,
+    )

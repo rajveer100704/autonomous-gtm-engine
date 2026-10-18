@@ -126,6 +126,16 @@ class CRMService:
         from gtm_engine.task_queue.execution_queue import execution_queue
         return execution_queue.enqueue(lead_id, task)
 
+    # ── V5 Outcome Learning & Decisions ──────────────────────────────────
+    def record_decision(self, **kwargs) -> int:
+        return self._db().record_decision(**kwargs)
+
+    def record_learning_outcome(self, **kwargs) -> dict:
+        return self._db().record_learning_outcome(**kwargs)
+
+    def get_attribution_dataset(self, **kwargs) -> dict:
+        return self._db().get_attribution_dataset(**kwargs)
+
     # ── Internal ──────────────────────────────────────────────────────────
     def _emit(self, event_name: str, lead_id: int | None = None, **metadata) -> None:
         try:

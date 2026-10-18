@@ -140,77 +140,119 @@ def pain_point_node(state: dict) -> dict:
 
 
 # ── Content Generation ────────────────────────────────────────────────────
+
 def content_node(state: dict) -> dict:
+    """Generate content and persist a retry-safe decision linked to its exact email."""
     from gtm_engine.agents import email_agent, linkedin_agent, ab_test, reflection_agent, evaluation_agent
     from gtm_engine.services.crm_service import crm
+    from gtm_engine.crm import db
+    from gtm_engine.optimization.policy import normalize_segment_key, VARIANT_STYLES, POLICY_VERSION
     from gtm_engine import tracing
 
     lead = state["current_lead"]
-    lead_id = lead["id"]
+    lead_id = int(lead["id"])
     trace_id = tracing.new_trace_id(lead_id)
     pain_points = state.get("pain_points", [])
     top_pain = pain_points[0] if pain_points else "general inefficiency"
     memory_context = state.get("memory_context", "")
-    variant = ab_test.assign_variant()
+    segment_key = normalize_segment_key(lead)
+    decision_key = f"dec_{lead_id}_email_0"
 
-    with tracing.span(trace_id, "email", lead_id=lead_id):
-        email_copy = email_agent.generate(
-            lead, pain_points, lead_id=lead_id,
-            style=email_agent.VARIANT_STYLES[variant],
-            feedback=memory_context,
+    # On a resumed/retried node, first reuse a previously persisted decision/outreach.
+    prior_decision = db.get_decision_by_key(decision_key)
+    email_outreach = None
+    if prior_decision and prior_decision.get("outreach_id"):
+        email_outreach = next((o for o in db.all_outreach() if o["id"] == prior_decision["outreach_id"]), None)
+    if email_outreach:
+        variant = prior_decision["action"]
+        email_copy = {"subject": email_outreach.get("subject") or "", "body": email_outreach.get("body") or "",
+                      "outreach_id": email_outreach["id"], "variant": variant,
+                      "decision_id": prior_decision["id"],
+                      "evaluation": {"approved": True, "reused_on_retry": True}}
+    else:
+        assignment = ab_test.assign_variant_with_probability(
+            segment_key=segment_key,
+            context={"industry": (lead.get("raw") or {}).get("industry", "unknown")},
         )
-
-    # 1. First reflection rewrite check
-    with tracing.span(trace_id, "reflect", lead_id=lead_id):
-        review = reflection_agent.judge(email_copy, top_pain, lead_id=lead_id)
-
-    if not review["approved"]:
-        log.info("content_node: reflection review rejected, rewriting (lead=%d)", lead_id)
-        with tracing.span(trace_id, "email_rewrite", lead_id=lead_id):
-            email_copy = email_agent.generate(
-                lead, pain_points, lead_id=lead_id,
-                style=email_agent.VARIANT_STYLES[variant],
-                feedback=review["feedback"],
+        variant = assignment["variant"]
+        # If an outreach was saved immediately before a crash, recover it rather than creating another touch.
+        existing_email = next((o for o in db.all_outreach()
+                               if o.get("lead_id") == lead_id and o.get("channel") == "email"
+                               and o.get("sequence_step") == 0), None)
+        if existing_email:
+            email_outreach_id = existing_email["id"]
+            variant = existing_email.get("variant") or variant
+            email_copy = {"subject": existing_email.get("subject") or "", "body": existing_email.get("body") or ""}
+            # This is crash recovery after the original propensity may have been lost; explicitly mark it non-causal.
+            recovered = True
+            assignment = {**assignment, "variant": variant, "action_value": VARIANT_STYLES[variant],
+                          "propensity": 0.5, "policy_name": "retry_recovery_v1",
+                          "policy_version": POLICY_VERSION}
+        else:
+            recovered = False
+            with tracing.span(trace_id, "email", lead_id=lead_id):
+                email_copy = email_agent.generate(
+                    lead, pain_points, lead_id=lead_id,
+                    style=VARIANT_STYLES[variant], feedback=memory_context,
+                )
+            with tracing.span(trace_id, "reflect", lead_id=lead_id):
+                review = reflection_agent.judge(email_copy, top_pain, lead_id=lead_id)
+            if not review["approved"]:
+                with tracing.span(trace_id, "email_rewrite", lead_id=lead_id):
+                    email_copy = email_agent.generate(
+                        lead, pain_points, lead_id=lead_id,
+                        style=VARIANT_STYLES[variant], feedback=review.get("feedback", ""),
+                    )
+            eval_res = evaluation_agent.evaluate(email_copy, lead, pain_points)
+            if not eval_res["approved"]:
+                log.warning("content_node: evaluation rejected lead=%d; using conservative fallback", lead_id)
+                email_copy["body"] = (
+                    f"Hi {lead.get('first_name', 'there')},\n\n"
+                    f"I noticed {lead.get('company', 'your company')} might be facing challenges with document review cycles. "
+                    "I'd love to connect to see if we can help simplify this.\n\n"
+                    f"Best,\n{settings.sender_name}"
+                )
+                email_copy["subject"] = f"Quick question re: document processes at {lead.get('company', 'your company')}"
+            email_outreach_id = crm.save_outreach(
+                lead_id=lead_id, channel="email", step=0,
+                subject=email_copy["subject"], body=email_copy["body"], variant=variant, status="drafted",
             )
+            email_copy["evaluation"] = eval_res
 
-    # 2. V3 Two-Stage Evaluation Agent Check (Gating execution)
-    eval_res = evaluation_agent.evaluate(email_copy, lead, pain_points)
-    
-    if not eval_res["approved"]:
-        # If it still fails, flag it and fallback to a default safe draft or raise
-        log.warning("content_node: V3 evaluation rejected lead=%d, drafting basic fallback", lead_id)
-        email_copy["body"] = (
-            f"Hi {lead.get('first_name', 'there')},\n\n"
-            f"I noticed {lead.get('company', 'your company')} might be facing challenges with document review cycles. "
-            f"I'd love to connect to see if we can help simplify this.\n\n"
-            f"Best,\n{settings.sender_name}"
+        # decision_key is stable by lead + channel + step; record_decision checks exact outreach ownership.
+        decision = crm.record_decision(
+            lead_id=lead_id, action=variant, action_value=VARIANT_STYLES[variant],
+            assignment_probability=assignment["propensity"], policy_name=assignment["policy_name"],
+            policy_version=assignment["policy_version"], decision_key=decision_key,
+            outreach_id=email_outreach_id, campaign_run_id=str(state.get("campaign_run_id") or f"lead-{lead_id}"),
+            channel="email", sequence_step=0, decision_type="email_style", segment_key=segment_key,
+            context={"industry": (lead.get("raw") or {}).get("industry", "unknown"),
+                     "is_simulated_exposure": bool(settings.mock_mode),
+                     "recovered_after_retry": bool(locals().get("recovered", False)),
+                     "propensity_valid": not bool(locals().get("recovered", False))},
         )
-        email_copy["subject"] = f"Quick question re: document processes at {lead.get('company', 'your company')}"
+        email_copy["outreach_id"] = email_outreach_id
+        email_copy["variant"] = variant
+        email_copy["decision_id"] = decision
 
-    email_id = crm.save_outreach(
-        lead_id=lead_id, channel="email", step=0,
-        subject=email_copy["subject"], body=email_copy["body"],
-        variant=variant, status="drafted",
-    )
-    email_copy["outreach_id"] = email_id
-    email_copy["variant"] = variant
-    email_copy["evaluation"] = eval_res
+    # Make LinkedIn copy persistence idempotent too, so a resumed node does not create duplicate touch rows.
+    existing_linkedin = next((o for o in db.all_outreach()
+                              if o.get("lead_id") == lead_id and o.get("channel") == "linkedin"
+                              and o.get("sequence_step") == 0), None)
+    if existing_linkedin:
+        linkedin_copy = {"message": existing_linkedin.get("body") or "", "outreach_id": existing_linkedin["id"]}
+    else:
+        with tracing.span(trace_id, "linkedin", lead_id=lead_id):
+            linkedin_copy = linkedin_agent.generate(lead, pain_points, lead_id=lead_id)
+        linkedin_id = crm.save_outreach(
+            lead_id=lead_id, channel="linkedin", step=0, subject=None,
+            body=linkedin_copy["message"], status="drafted",
+        )
+        linkedin_copy["outreach_id"] = linkedin_id
 
-    with tracing.span(trace_id, "linkedin", lead_id=lead_id):
-        linkedin_copy = linkedin_agent.generate(lead, pain_points, lead_id=lead_id)
-
-    linkedin_id = crm.save_outreach(
-        lead_id=lead_id, channel="linkedin", step=0,
-        subject=None, body=linkedin_copy["message"], status="drafted",
-    )
-    linkedin_copy["outreach_id"] = linkedin_id
-
-    log.info("content_node: lead %d — email+linkedin generated and evaluated", lead_id)
+    log.info("content_node: lead %d — email+linkedin generated; decision linked to outreach", lead_id)
     return {"email_copy": email_copy, "linkedin_copy": linkedin_copy}
 
-
-
-# ── Strategy ──────────────────────────────────────────────────────────────
 def strategy_node(state: dict) -> dict:
     from gtm_engine.agents.strategy_agent import decide_outreach_strategy
     from gtm_engine.memory.lead_memory import lead_memory

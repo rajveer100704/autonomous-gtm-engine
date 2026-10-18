@@ -1,0 +1,2073 @@
+{
+  "caveats": [
+    "All results are synthetic and are not evidence of real-world uplift.",
+    "All policies within a scenario are scored on the same held-out lead potential outcomes.",
+    "The oracle is a non-deployable theoretical upper bound that uses simulator ground truth only for scoring.",
+    "The bootstrap interval is per-scenario paired differences; the multi-scenario report shows variation rather than a production guarantee.",
+    "This benchmark is separate from the queue throughput benchmark."
+  ],
+  "equal_effect_negative_control": {
+    "caveat": "Finite-sample noise can produce positive or negative differences; this is a regression control, not a hypothesis test about real campaigns.",
+    "mean_segment_policy_difference_vs_baseline": 0.0057,
+    "scenario_count": 5,
+    "scenario_differences": [
+      0.006,
+      0.008,
+      0.0015,
+      0.0115,
+      0.0015
+    ]
+  },
+  "generator_assumptions": "Synthetic only; technical and operations segments have opposing preferred variants in the positive-control scenario.",
+  "heldout_evaluation_size": 2000,
+  "metrics": {
+    "global_best_v1": {
+      "deployable": true,
+      "mean_bounce_rate": 0.0285,
+      "mean_difference_vs_baseline": 0.0075,
+      "mean_meeting_rate": 0.0852,
+      "mean_regret_vs_oracle": 0.076,
+      "mean_reply_rate": 0.2319,
+      "mean_unsubscribe_rate": 0.0182,
+      "mean_won_rate": 0.0187,
+      "samples_per_scenario": 2000
+    },
+    "oracle_upper_bound": {
+      "deployable": false,
+      "mean_bounce_rate": 0.029,
+      "mean_difference_vs_baseline": 0.0835,
+      "mean_meeting_rate": 0.1178,
+      "mean_regret_vs_oracle": 0.0,
+      "mean_reply_rate": 0.3079,
+      "mean_unsubscribe_rate": 0.0143,
+      "mean_won_rate": 0.0285,
+      "samples_per_scenario": 2000
+    },
+    "randomized_baseline_v1": {
+      "deployable": true,
+      "mean_bounce_rate": 0.0301,
+      "mean_difference_vs_baseline": 0.0,
+      "mean_meeting_rate": 0.0849,
+      "mean_regret_vs_oracle": 0.0835,
+      "mean_reply_rate": 0.2244,
+      "mean_unsubscribe_rate": 0.0176,
+      "mean_won_rate": 0.0185,
+      "samples_per_scenario": 2000
+    },
+    "segment_best_v1": {
+      "deployable": true,
+      "mean_bounce_rate": 0.0288,
+      "mean_difference_vs_baseline": 0.0505,
+      "mean_meeting_rate": 0.1032,
+      "mean_regret_vs_oracle": 0.033,
+      "mean_reply_rate": 0.2749,
+      "mean_unsubscribe_rate": 0.0158,
+      "mean_won_rate": 0.0241,
+      "samples_per_scenario": 2000
+    }
+  },
+  "negative_control_scenarios": [
+    {
+      "equal_effect_negative_control": true,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic negative control: both variants have equal outcome probability within each segment.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0270, 0.0304] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Difference interval [-0.0239, 0.0556] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          },
+          "technical": {
+            "reason": "Difference interval [-0.0539, 0.0288] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          }
+        },
+        "segment_winners": {},
+        "training_arm_counts": {
+          "A": {
+            "bounced": 30,
+            "meetings": 106,
+            "replied": 305,
+            "sent": 1511,
+            "unsubscribed": 29,
+            "won": 27
+          },
+          "B": {
+            "bounced": 34,
+            "meetings": 98,
+            "replied": 298,
+            "sent": 1489,
+            "unsubscribed": 34,
+            "won": 20
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 983,
+            "B": 1017
+          },
+          "bounce_rate": 0.029,
+          "difference_vs_baseline": -0.003,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.022,
+            0.014
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": -0.003,
+            "reply_difference_bootstrap_95_ci": [
+              -0.022,
+              0.014
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.012733,
+                "ci_upper": 0.008698,
+                "difference": -0.002,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.007183,
+                "ci_upper": 0.008202,
+                "difference": 0.0005,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.073,
+          "regret_vs_oracle": 0.009,
+          "reply_count": 405,
+          "reply_rate": 0.2025,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.015,
+          "won_rate": 0.016
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 2000,
+            "B": 0
+          },
+          "bounce_rate": 0.0245,
+          "difference_vs_baseline": 0.006,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0115,
+            0.022
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.078,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 423,
+          "reply_rate": 0.2115,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.019,
+          "won_rate": 0.019
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1003,
+            "B": 997
+          },
+          "bounce_rate": 0.031,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0775,
+          "regret_vs_oracle": 0.006,
+          "reply_count": 411,
+          "reply_rate": 0.2055,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0145,
+          "won_rate": 0.016
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1022,
+            "B": 978
+          },
+          "bounce_rate": 0.0275,
+          "difference_vs_baseline": 0.006,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.012,
+            0.022
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.006,
+            "reply_difference_bootstrap_95_ci": [
+              -0.012,
+              0.022
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.01412,
+                "ci_upper": 0.007057,
+                "difference": -0.0035,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.006284,
+                "ci_upper": 0.00934,
+                "difference": 0.0015,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0735,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 423,
+          "reply_rate": 0.2115,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.016,
+          "won_rate": 0.0145
+        }
+      },
+      "seed": 20271019,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": true,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic negative control: both variants have equal outcome probability within each segment.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Variant A passed statistical and safety gates with 3.39% lift (95% CI [0.0042, 0.0636])",
+          "status": "recommendation",
+          "winner": "A"
+        },
+        "global_winner": "A",
+        "segment_gates": {
+          "operations": {
+            "reason": "Difference interval [-0.0120, 0.0695] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          },
+          "technical": {
+            "reason": "Difference interval [-0.0054, 0.0810] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          }
+        },
+        "segment_winners": {},
+        "training_arm_counts": {
+          "A": {
+            "bounced": 31,
+            "meetings": 125,
+            "replied": 353,
+            "sent": 1480,
+            "unsubscribed": 23,
+            "won": 22
+          },
+          "B": {
+            "bounced": 40,
+            "meetings": 110,
+            "replied": 311,
+            "sent": 1520,
+            "unsubscribed": 33,
+            "won": 28
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 1617,
+            "B": 383
+          },
+          "bounce_rate": 0.018,
+          "difference_vs_baseline": -0.0035,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.02,
+            0.0155
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": -0.0035,
+            "reply_difference_bootstrap_95_ci": [
+              -0.02,
+              0.0155
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.005617,
+                "ci_upper": 0.010702,
+                "difference": 0.0025,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.00889,
+                "ci_upper": 0.007874,
+                "difference": -0.0005,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.077,
+          "regret_vs_oracle": 0.0065,
+          "reply_count": 414,
+          "reply_rate": 0.207,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0175,
+          "won_rate": 0.0105
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 2000,
+            "B": 0
+          },
+          "bounce_rate": 0.018,
+          "difference_vs_baseline": 0.003,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.015,
+            0.0205
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.076,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 427,
+          "reply_rate": 0.2135,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0185,
+          "won_rate": 0.01
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1004,
+            "B": 996
+          },
+          "bounce_rate": 0.0155,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0695,
+          "regret_vs_oracle": 0.003,
+          "reply_count": 421,
+          "reply_rate": 0.2105,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.018,
+          "won_rate": 0.0085
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1601,
+            "B": 399
+          },
+          "bounce_rate": 0.022,
+          "difference_vs_baseline": 0.008,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.011,
+            0.0245
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.008,
+            "reply_difference_bootstrap_95_ci": [
+              -0.011,
+              0.0245
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.001998,
+                "ci_upper": 0.015195,
+                "difference": 0.0065,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.007984,
+                "ci_upper": 0.009,
+                "difference": 0.0005,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.081,
+          "regret_vs_oracle": -0.005,
+          "reply_count": 437,
+          "reply_rate": 0.2185,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0185,
+          "won_rate": 0.011
+        }
+      },
+      "seed": 20271020,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": true,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic negative control: both variants have equal outcome probability within each segment.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0272, 0.0306] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Difference interval [-0.0420, 0.0384] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          },
+          "technical": {
+            "reason": "Difference interval [-0.0359, 0.0472] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          }
+        },
+        "segment_winners": {},
+        "training_arm_counts": {
+          "A": {
+            "bounced": 40,
+            "meetings": 109,
+            "replied": 309,
+            "sent": 1501,
+            "unsubscribed": 24,
+            "won": 21
+          },
+          "B": {
+            "bounced": 42,
+            "meetings": 109,
+            "replied": 306,
+            "sent": 1499,
+            "unsubscribed": 21,
+            "won": 22
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 1014,
+            "B": 986
+          },
+          "bounce_rate": 0.0235,
+          "difference_vs_baseline": -0.0005,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0175,
+            0.0155
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": -0.0005,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0175,
+              0.0155
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.010109,
+                "ci_upper": 0.009098,
+                "difference": -0.0005,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.005714,
+                "ci_upper": 0.011801,
+                "difference": 0.003,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0775,
+          "regret_vs_oracle": 0.003,
+          "reply_count": 399,
+          "reply_rate": 0.1995,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.021,
+          "won_rate": 0.0135
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 2000,
+            "B": 0
+          },
+          "bounce_rate": 0.0265,
+          "difference_vs_baseline": 0.0025,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.016,
+            0.0195
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.0705,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 405,
+          "reply_rate": 0.2025,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.021,
+          "won_rate": 0.007
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1017,
+            "B": 983
+          },
+          "bounce_rate": 0.024,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0775,
+          "regret_vs_oracle": 0.0025,
+          "reply_count": 400,
+          "reply_rate": 0.2,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.018,
+          "won_rate": 0.0125
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1007,
+            "B": 993
+          },
+          "bounce_rate": 0.0285,
+          "difference_vs_baseline": 0.0015,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0155,
+            0.0175
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.0015,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0155,
+              0.0175
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.005517,
+                "ci_upper": 0.01461,
+                "difference": 0.0045,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.00344,
+                "ci_upper": 0.014588,
+                "difference": 0.0055,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.073,
+          "regret_vs_oracle": 0.001,
+          "reply_count": 403,
+          "reply_rate": 0.2015,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0235,
+          "won_rate": 0.0115
+        }
+      },
+      "seed": 20271021,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": true,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic negative control: both variants have equal outcome probability within each segment.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0192, 0.0408] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Difference interval [-0.0276, 0.0549] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          },
+          "technical": {
+            "reason": "Difference interval [-0.0350, 0.0521] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          }
+        },
+        "segment_winners": {},
+        "training_arm_counts": {
+          "A": {
+            "bounced": 49,
+            "meetings": 120,
+            "replied": 362,
+            "sent": 1552,
+            "unsubscribed": 20,
+            "won": 22
+          },
+          "B": {
+            "bounced": 32,
+            "meetings": 114,
+            "replied": 322,
+            "sent": 1448,
+            "unsubscribed": 18,
+            "won": 19
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 973,
+            "B": 1027
+          },
+          "bounce_rate": 0.02,
+          "difference_vs_baseline": 0.0185,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0015,
+            0.0365
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Observed reply-rate lift is below the 2.0% practical threshold.",
+            "reply_ci_excludes_zero_in_favor": true,
+            "reply_difference": 0.0185,
+            "reply_difference_bootstrap_95_ci": [
+              0.0015,
+              0.0365
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.013869,
+                "ci_upper": 0.004758,
+                "difference": -0.0045,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.010325,
+                "ci_upper": 0.00419,
+                "difference": -0.003,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "practical_lift_not_met"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0815,
+          "regret_vs_oracle": -0.012,
+          "reply_count": 445,
+          "reply_rate": 0.2225,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0115,
+          "won_rate": 0.022
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 2000,
+            "B": 0
+          },
+          "bounce_rate": 0.0245,
+          "difference_vs_baseline": 0.0065,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0125,
+            0.024
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.0795,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 421,
+          "reply_rate": 0.2105,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0135,
+          "won_rate": 0.018
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 976,
+            "B": 1024
+          },
+          "bounce_rate": 0.0245,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.074,
+          "regret_vs_oracle": 0.0065,
+          "reply_count": 408,
+          "reply_rate": 0.204,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0145,
+          "won_rate": 0.017
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1011,
+            "B": 989
+          },
+          "bounce_rate": 0.024,
+          "difference_vs_baseline": 0.0115,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0045,
+            0.0315
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.0115,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0045,
+              0.0315
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.010203,
+                "ci_upper": 0.009192,
+                "difference": -0.0005,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.008979,
+                "ci_upper": 0.005915,
+                "difference": -0.0015,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.081,
+          "regret_vs_oracle": -0.005,
+          "reply_count": 431,
+          "reply_rate": 0.2155,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.013,
+          "won_rate": 0.02
+        }
+      },
+      "seed": 20271022,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": true,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic negative control: both variants have equal outcome probability within each segment.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0298, 0.0276] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Difference interval [-0.0366, 0.0411] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          },
+          "technical": {
+            "reason": "Difference interval [-0.0480, 0.0363] includes zero; no statistically significant advantage",
+            "status": "no_clear_winner",
+            "winner": null
+          }
+        },
+        "segment_winners": {},
+        "training_arm_counts": {
+          "A": {
+            "bounced": 32,
+            "meetings": 102,
+            "replied": 304,
+            "sent": 1519,
+            "unsubscribed": 30,
+            "won": 26
+          },
+          "B": {
+            "bounced": 34,
+            "meetings": 98,
+            "replied": 298,
+            "sent": 1481,
+            "unsubscribed": 21,
+            "won": 19
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 1047,
+            "B": 953
+          },
+          "bounce_rate": 0.0265,
+          "difference_vs_baseline": -0.015,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0335,
+            0.0025
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": -0.015,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0335,
+              0.0025
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.011208,
+                "ci_upper": 0.009189,
+                "difference": -0.001,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.009906,
+                "ci_upper": 0.006858,
+                "difference": -0.0015,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.077,
+          "regret_vs_oracle": 0.0115,
+          "reply_count": 405,
+          "reply_rate": 0.2025,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.017,
+          "won_rate": 0.02
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 2000,
+            "B": 0
+          },
+          "bounce_rate": 0.0255,
+          "difference_vs_baseline": -0.0035,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.022,
+            0.013
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.0785,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 428,
+          "reply_rate": 0.214,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.017,
+          "won_rate": 0.0205
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 988,
+            "B": 1012
+          },
+          "bounce_rate": 0.0275,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0805,
+          "regret_vs_oracle": -0.0035,
+          "reply_count": 435,
+          "reply_rate": 0.2175,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0185,
+          "won_rate": 0.017
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1038,
+            "B": 962
+          },
+          "bounce_rate": 0.024,
+          "difference_vs_baseline": 0.0015,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0165,
+            0.0195
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.0015,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0165,
+              0.0195
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.01351,
+                "ci_upper": 0.006437,
+                "difference": -0.0035,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.009906,
+                "ci_upper": 0.006858,
+                "difference": -0.0015,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.076,
+          "regret_vs_oracle": -0.005,
+          "reply_count": 438,
+          "reply_rate": 0.219,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.017,
+          "won_rate": 0.0165
+        }
+      },
+      "seed": 20271023,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    }
+  ],
+  "positive_control_scenarios": [
+    {
+      "equal_effect_negative_control": false,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic only: variant A/direct favors technical leads and variant B/curiosity favors operations leads.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0149, 0.0443] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Variant B passed statistical and safety gates with 14.41% lift (95% CI [-0.1838, -0.1038])",
+            "status": "recommendation",
+            "winner": "B"
+          },
+          "technical": {
+            "reason": "Variant A passed statistical and safety gates with 18.24% lift (95% CI [0.1400, 0.2241])",
+            "status": "recommendation",
+            "winner": "A"
+          }
+        },
+        "segment_winners": {
+          "operations": "B",
+          "technical": "A"
+        },
+        "training_arm_counts": {
+          "A": {
+            "bounced": 26,
+            "meetings": 119,
+            "replied": 332,
+            "sent": 1468,
+            "unsubscribed": 31,
+            "won": 34
+          },
+          "B": {
+            "bounced": 35,
+            "meetings": 124,
+            "replied": 324,
+            "sent": 1532,
+            "unsubscribed": 26,
+            "won": 23
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 974,
+            "B": 1026
+          },
+          "bounce_rate": 0.0275,
+          "difference_vs_baseline": 0.008,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0105,
+            0.028
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.008,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0105,
+              0.028
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.022285,
+                "ci_upper": 0.000114,
+                "difference": -0.011,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.011719,
+                "ci_upper": 0.004599,
+                "difference": -0.0035,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0845,
+          "regret_vs_oracle": 0.068,
+          "reply_count": 468,
+          "reply_rate": 0.234,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.015,
+          "won_rate": 0.018
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 1037,
+            "B": 963
+          },
+          "bounce_rate": 0.0315,
+          "difference_vs_baseline": 0.076,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.057,
+            0.0945
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.1105,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 604,
+          "reply_rate": 0.302,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.014,
+          "won_rate": 0.0235
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1008,
+            "B": 992
+          },
+          "bounce_rate": 0.0385,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0815,
+          "regret_vs_oracle": 0.076,
+          "reply_count": 452,
+          "reply_rate": 0.226,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0185,
+          "won_rate": 0.016
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1036,
+            "B": 964
+          },
+          "bounce_rate": 0.033,
+          "difference_vs_baseline": 0.049,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.03,
+            0.0665
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": true,
+            "reason": "Held-out reply lift, paired interval, practical threshold, and safety guardrails passed in this synthetic scenario.",
+            "reply_ci_excludes_zero_in_favor": true,
+            "reply_difference": 0.049,
+            "reply_difference_bootstrap_95_ci": [
+              0.03,
+              0.0665
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.01717,
+                "ci_upper": 0.006094,
+                "difference": -0.0055,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.01036,
+                "ci_upper": 0.006295,
+                "difference": -0.002,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "passes_synthetic_heldout_gate"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0975,
+          "regret_vs_oracle": 0.027,
+          "reply_count": 550,
+          "reply_rate": 0.275,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0165,
+          "won_rate": 0.021
+        }
+      },
+      "seed": 20261019,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": false,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic only: variant A/direct favors technical leads and variant B/curiosity favors operations leads.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Variant A passed statistical and safety gates with 4.32% lift (95% CI [0.0128, 0.0735])",
+          "status": "recommendation",
+          "winner": "A"
+        },
+        "global_winner": "A",
+        "segment_gates": {
+          "operations": {
+            "reason": "Variant B passed statistical and safety gates with 16.02% lift (95% CI [-0.2014, -0.1182])",
+            "status": "recommendation",
+            "winner": "B"
+          },
+          "technical": {
+            "reason": "Variant A passed statistical and safety gates with 23.10% lift (95% CI [0.1895, 0.2714])",
+            "status": "recommendation",
+            "winner": "A"
+          }
+        },
+        "segment_winners": {
+          "operations": "B",
+          "technical": "A"
+        },
+        "training_arm_counts": {
+          "A": {
+            "bounced": 39,
+            "meetings": 153,
+            "replied": 384,
+            "sent": 1492,
+            "unsubscribed": 21,
+            "won": 37
+          },
+          "B": {
+            "bounced": 56,
+            "meetings": 119,
+            "replied": 323,
+            "sent": 1508,
+            "unsubscribed": 15,
+            "won": 30
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 1591,
+            "B": 409
+          },
+          "bounce_rate": 0.028,
+          "difference_vs_baseline": -0.001,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0205,
+            0.02
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": -0.001,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0205,
+              0.02
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.008729,
+                "ci_upper": 0.011757,
+                "difference": 0.0015,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.01089,
+                "ci_upper": 0.006833,
+                "difference": -0.002,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.078,
+          "regret_vs_oracle": 0.084,
+          "reply_count": 435,
+          "reply_rate": 0.2175,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.019,
+          "won_rate": 0.0175
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 950,
+            "B": 1050
+          },
+          "bounce_rate": 0.029,
+          "difference_vs_baseline": 0.083,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0635,
+            0.0995
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.111,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 603,
+          "reply_rate": 0.3015,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.018,
+          "won_rate": 0.029
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1004,
+            "B": 996
+          },
+          "bounce_rate": 0.0265,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.075,
+          "regret_vs_oracle": 0.083,
+          "reply_count": 437,
+          "reply_rate": 0.2185,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.021,
+          "won_rate": 0.0175
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 966,
+            "B": 1034
+          },
+          "bounce_rate": 0.0295,
+          "difference_vs_baseline": 0.0555,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.036,
+            0.0725
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": true,
+            "reason": "Held-out reply lift, paired interval, practical threshold, and safety guardrails passed in this synthetic scenario.",
+            "reply_ci_excludes_zero_in_favor": true,
+            "reply_difference": 0.0555,
+            "reply_difference_bootstrap_95_ci": [
+              0.036,
+              0.0725
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.007346,
+                "ci_upper": 0.013402,
+                "difference": 0.003,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.012711,
+                "ci_upper": 0.004591,
+                "difference": -0.004,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "passes_synthetic_heldout_gate"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.1,
+          "regret_vs_oracle": 0.0275,
+          "reply_count": 548,
+          "reply_rate": 0.274,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.017,
+          "won_rate": 0.026
+        }
+      },
+      "seed": 20261020,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": false,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic only: variant A/direct favors technical leads and variant B/curiosity favors operations leads.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0034, 0.0562] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Variant B passed statistical and safety gates with 12.79% lift (95% CI [-0.1696, -0.0857])",
+            "status": "recommendation",
+            "winner": "B"
+          },
+          "technical": {
+            "reason": "Variant A passed statistical and safety gates with 17.06% lift (95% CI [0.1294, 0.2112])",
+            "status": "recommendation",
+            "winner": "A"
+          }
+        },
+        "segment_winners": {
+          "operations": "B",
+          "technical": "A"
+        },
+        "training_arm_counts": {
+          "A": {
+            "bounced": 32,
+            "meetings": 111,
+            "replied": 355,
+            "sent": 1503,
+            "unsubscribed": 34,
+            "won": 20
+          },
+          "B": {
+            "bounced": 45,
+            "meetings": 115,
+            "replied": 314,
+            "sent": 1497,
+            "unsubscribed": 22,
+            "won": 40
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 1035,
+            "B": 965
+          },
+          "bounce_rate": 0.0285,
+          "difference_vs_baseline": 0.009,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.008,
+            0.028
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.009,
+            "reply_difference_bootstrap_95_ci": [
+              -0.008,
+              0.028
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.012102,
+                "ci_upper": 0.009075,
+                "difference": -0.0015,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.000757,
+                "ci_upper": 0.016,
+                "difference": 0.0075,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.083,
+          "regret_vs_oracle": 0.074,
+          "reply_count": 476,
+          "reply_rate": 0.238,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0215,
+          "won_rate": 0.0235
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 1004,
+            "B": 996
+          },
+          "bounce_rate": 0.029,
+          "difference_vs_baseline": 0.083,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0655,
+            0.102
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.1215,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 624,
+          "reply_rate": 0.312,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.013,
+          "won_rate": 0.0325
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1015,
+            "B": 985
+          },
+          "bounce_rate": 0.03,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.089,
+          "regret_vs_oracle": 0.083,
+          "reply_count": 458,
+          "reply_rate": 0.229,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.014,
+          "won_rate": 0.0185
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 1024,
+            "B": 976
+          },
+          "bounce_rate": 0.027,
+          "difference_vs_baseline": 0.046,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.028,
+            0.0645
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": true,
+            "reason": "Held-out reply lift, paired interval, practical threshold, and safety guardrails passed in this synthetic scenario.",
+            "reply_ci_excludes_zero_in_favor": true,
+            "reply_difference": 0.046,
+            "reply_difference_bootstrap_95_ci": [
+              0.028,
+              0.0645
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.013488,
+                "ci_upper": 0.007432,
+                "difference": -0.003,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.00751,
+                "ci_upper": 0.00751,
+                "difference": 0.0,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "passes_synthetic_heldout_gate"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.108,
+          "regret_vs_oracle": 0.037,
+          "reply_count": 550,
+          "reply_rate": 0.275,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.014,
+          "won_rate": 0.0285
+        }
+      },
+      "seed": 20261021,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": false,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic only: variant A/direct favors technical leads and variant B/curiosity favors operations leads.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0270, 0.0325] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Variant B passed statistical and safety gates with 17.57% lift (95% CI [-0.2166, -0.1344])",
+            "status": "recommendation",
+            "winner": "B"
+          },
+          "technical": {
+            "reason": "Variant A passed statistical and safety gates with 18.28% lift (95% CI [0.1412, 0.2235])",
+            "status": "recommendation",
+            "winner": "A"
+          }
+        },
+        "segment_winners": {
+          "operations": "B",
+          "technical": "A"
+        },
+        "training_arm_counts": {
+          "A": {
+            "bounced": 44,
+            "meetings": 129,
+            "replied": 346,
+            "sent": 1549,
+            "unsubscribed": 33,
+            "won": 30
+          },
+          "B": {
+            "bounced": 50,
+            "meetings": 117,
+            "replied": 320,
+            "sent": 1451,
+            "unsubscribed": 33,
+            "won": 31
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 966,
+            "B": 1034
+          },
+          "bounce_rate": 0.0275,
+          "difference_vs_baseline": 0.008,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.0105,
+            0.025
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.008,
+            "reply_difference_bootstrap_95_ci": [
+              -0.0105,
+              0.025
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.008639,
+                "ci_upper": 0.011669,
+                "difference": 0.0015,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.007536,
+                "ci_upper": 0.008555,
+                "difference": 0.0005,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0955,
+          "regret_vs_oracle": 0.0695,
+          "reply_count": 477,
+          "reply_rate": 0.2385,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0165,
+          "won_rate": 0.022
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 998,
+            "B": 1002
+          },
+          "bounce_rate": 0.029,
+          "difference_vs_baseline": 0.0775,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0585,
+            0.0965
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.124,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 616,
+          "reply_rate": 0.308,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0125,
+          "won_rate": 0.033
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 999,
+            "B": 1001
+          },
+          "bounce_rate": 0.026,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0955,
+          "regret_vs_oracle": 0.0775,
+          "reply_count": 461,
+          "reply_rate": 0.2305,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.016,
+          "won_rate": 0.024
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 989,
+            "B": 1011
+          },
+          "bounce_rate": 0.0285,
+          "difference_vs_baseline": 0.0395,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0185,
+            0.0575
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": true,
+            "reason": "Held-out reply lift, paired interval, practical threshold, and safety guardrails passed in this synthetic scenario.",
+            "reply_ci_excludes_zero_in_favor": true,
+            "reply_difference": 0.0395,
+            "reply_difference_bootstrap_95_ci": [
+              0.0185,
+              0.0575
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.007718,
+                "ci_upper": 0.012767,
+                "difference": 0.0025,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.008439,
+                "ci_upper": 0.007421,
+                "difference": -0.0005,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "passes_synthetic_heldout_gate"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.1075,
+          "regret_vs_oracle": 0.038,
+          "reply_count": 540,
+          "reply_rate": 0.27,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0155,
+          "won_rate": 0.025
+        }
+      },
+      "seed": 20261022,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    },
+    {
+      "equal_effect_negative_control": false,
+      "evaluation_size": 2000,
+      "ground_truth_assumptions": "Synthetic only: variant A/direct favors technical leads and variant B/curiosity favors operations leads.",
+      "heldout_population_shared": true,
+      "learned_policy": {
+        "global_gate": {
+          "reason": "Difference interval [-0.0227, 0.0363] includes zero; no statistically significant advantage",
+          "status": "no_clear_winner",
+          "winner": null
+        },
+        "global_winner": null,
+        "segment_gates": {
+          "operations": {
+            "reason": "Variant B passed statistical and safety gates with 12.85% lift (95% CI [-0.1688, -0.0877])",
+            "status": "recommendation",
+            "winner": "B"
+          },
+          "technical": {
+            "reason": "Variant A passed statistical and safety gates with 13.32% lift (95% CI [0.0912, 0.1746])",
+            "status": "recommendation",
+            "winner": "A"
+          }
+        },
+        "segment_winners": {
+          "operations": "B",
+          "technical": "A"
+        },
+        "training_arm_counts": {
+          "A": {
+            "bounced": 56,
+            "meetings": 124,
+            "replied": 330,
+            "sent": 1495,
+            "unsubscribed": 30,
+            "won": 33
+          },
+          "B": {
+            "bounced": 44,
+            "meetings": 114,
+            "replied": 322,
+            "sent": 1505,
+            "unsubscribed": 30,
+            "won": 21
+          }
+        },
+        "training_size": 3000
+      },
+      "limitations": [
+        "All outcomes are synthetic potential outcomes.",
+        "The oracle uses known simulator truth and is not a deployable policy.",
+        "Bootstrap intervals describe this synthetic held-out cohort and are not product or causal evidence."
+      ],
+      "policies": {
+        "global_best_v1": {
+          "action_allocation": {
+            "A": 1029,
+            "B": 971
+          },
+          "bounce_rate": 0.031,
+          "difference_vs_baseline": 0.0135,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            -0.004,
+            0.0305
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": false,
+            "reason": "Paired bootstrap 95% interval does not exclude zero in the candidate policy's favor.",
+            "reply_ci_excludes_zero_in_favor": false,
+            "reply_difference": 0.0135,
+            "reply_difference_bootstrap_95_ci": [
+              -0.004,
+              0.0305
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.009244,
+                "ci_upper": 0.01227,
+                "difference": 0.0015,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.008092,
+                "ci_upper": 0.009107,
+                "difference": 0.0005,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "no_clear_measured_lift"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.085,
+          "regret_vs_oracle": 0.0845,
+          "reply_count": 463,
+          "reply_rate": 0.2315,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.019,
+          "won_rate": 0.0125
+        },
+        "oracle_upper_bound": {
+          "action_allocation": {
+            "A": 971,
+            "B": 1029
+          },
+          "bounce_rate": 0.0265,
+          "difference_vs_baseline": 0.098,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0795,
+            0.118
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Oracle uses known simulator truth and cannot be deployed.",
+            "status": "upper_bound_not_deployable"
+          },
+          "is_deployable": false,
+          "meeting_rate": 0.122,
+          "regret_vs_oracle": 0.0,
+          "reply_count": 632,
+          "reply_rate": 0.316,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.014,
+          "won_rate": 0.0245
+        },
+        "randomized_baseline_v1": {
+          "action_allocation": {
+            "A": 1004,
+            "B": 996
+          },
+          "bounce_rate": 0.0295,
+          "difference_vs_baseline": 0.0,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.0,
+            0.0
+          ],
+          "heldout_evidence_gate": {
+            "passes": null,
+            "reason": "Reference policy; not compared to itself.",
+            "status": "reference_baseline"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.0835,
+          "regret_vs_oracle": 0.098,
+          "reply_count": 436,
+          "reply_rate": 0.218,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.0185,
+          "won_rate": 0.0165
+        },
+        "segment_best_v1": {
+          "action_allocation": {
+            "A": 971,
+            "B": 1029
+          },
+          "bounce_rate": 0.026,
+          "difference_vs_baseline": 0.0625,
+          "difference_vs_baseline_bootstrap_95_ci": [
+            0.042,
+            0.08
+          ],
+          "heldout_evidence_gate": {
+            "min_practical_lift": 0.02,
+            "passes": true,
+            "reason": "Held-out reply lift, paired interval, practical threshold, and safety guardrails passed in this synthetic scenario.",
+            "reply_ci_excludes_zero_in_favor": true,
+            "reply_difference": 0.0625,
+            "reply_difference_bootstrap_95_ci": [
+              0.042,
+              0.08
+            ],
+            "safety_guardrails": {
+              "bounce": {
+                "ci_lower": -0.013864,
+                "ci_upper": 0.006796,
+                "difference": -0.0035,
+                "max_allowed_excess": 0.03
+              },
+              "unsubscribe": {
+                "ci_lower": -0.010813,
+                "ci_upper": 0.00573,
+                "difference": -0.0025,
+                "max_allowed_excess": 0.03
+              }
+            },
+            "status": "passes_synthetic_heldout_gate"
+          },
+          "is_deployable": true,
+          "meeting_rate": 0.103,
+          "regret_vs_oracle": 0.0355,
+          "reply_count": 561,
+          "reply_rate": 0.2805,
+          "sample_size": 2000,
+          "unsubscribe_rate": 0.016,
+          "won_rate": 0.02
+        }
+      },
+      "seed": 20261023,
+      "train_and_evaluation_disjoint": true,
+      "training_size": 3000
+    }
+  ],
+  "scenario_count": 5,
+  "schema_version": "1.0",
+  "seed": 20261019,
+  "split_method": "Independent seed-derived training and held-out potential-outcome populations. Policy fitting sees training rows only.",
+  "train_size": 3000
+}

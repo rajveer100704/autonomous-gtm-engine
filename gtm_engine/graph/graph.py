@@ -22,6 +22,7 @@ Human-in-the-loop: interrupt_before=["queue"] if HUMAN_APPROVAL_MODE=true.
 from __future__ import annotations
 
 import logging
+import uuid
 from functools import lru_cache
 
 log = logging.getLogger("gtm.graph")
@@ -146,10 +147,12 @@ def run_campaign_graph(
 
     graph = build_campaign_graph(human_approval=human_approval or settings.human_approval_mode)
 
+    campaign_run_id = str(thread_id) if thread_id else f"graph-{uuid.uuid4().hex}"
     initial_state = {
         "max_leads": max_leads,
         "objective": objective,
         "plan": {"focus": focus},
+        "campaign_run_id": campaign_run_id,
         "campaign_complete": False,
     }
 

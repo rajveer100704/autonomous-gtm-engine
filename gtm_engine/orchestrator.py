@@ -10,6 +10,7 @@ vendor beyond the imports.
 """
 import datetime
 import logging
+import uuid
 
 from gtm_engine.clients import apollo_client
 from gtm_engine.agents import (
@@ -25,15 +26,16 @@ log = logging.getLogger("gtm_orchestrator")
 
 def run_pipeline(max_leads: int = 10, sender_fn=None) -> list[dict]:
     """
-    sender_fn(outreach_row: dict) -> bool, used to "send" the first-touch
-    outreach right after drafting so the funnel has real sent/opened/
-    replied data instead of everything sitting at 'drafted'. Defaults to a
-    dry-run no-op that always succeeds.
+    sender_fn(outreach_row: dict) -> bool | dict, used to send the first-touch.
+    The default sender is explicitly simulated; it is never eligible for real
+    outcome learning. Provide a real sender_fn to record real exposures.
     """
+    using_default_simulator = sender_fn is None
     if sender_fn is None:
-        sender_fn = lambda row: True  # noqa: E731
+        sender_fn = lambda row: {"success": True, "simulated": True}  # noqa: E731
 
     db.init_db()
+    campaign_run_id = f"linear-{uuid.uuid4().hex}"
     raw_leads = apollo_client.search_leads(per_page=max_leads)
     log.info("Pulled %d leads from Apollo", len(raw_leads))
 
@@ -61,7 +63,13 @@ def run_pipeline(max_leads: int = 10, sender_fn=None) -> list[dict]:
         pain_points = pain_output.get("pain_points", [])
         db.save_pain_points(lead_id, "; ".join(pain_points), pain_output.get("confidence", ""))
 
-        email_variant = ab_test.assign_variant()
+        from gtm_engine.optimization.policy import normalize_segment_key
+        segment_key = normalize_segment_key(enriched)
+        asg = ab_test.assign_variant_with_probability(
+            segment_key=segment_key,
+            context={"company": enriched.get("company"), "title": enriched.get("title")},
+        )
+        email_variant = asg["variant"]
         top_pain = pain_points[0] if pain_points else "general inefficiency"
         with tracing.span(trace_id, "email", lead_id=lead_id):
             email_copy = email_agent.generate(
@@ -86,7 +94,40 @@ def run_pipeline(max_leads: int = 10, sender_fn=None) -> list[dict]:
             variant=email_variant,
             scheduled_for=datetime.datetime.now(datetime.timezone.utc), status="drafted",
         )
-        if sender_fn({"id": email_outreach_id, "subject": email_copy["subject"]}):
+        from gtm_engine.config import settings
+        sender_is_simulated = (settings.mock_mode or using_default_simulator
+                               or bool(getattr(sender_fn, "is_simulated", False)))
+        # Log learning decision with stable idempotency key. Provenance is part of
+        # the immutable decision-time context so simulated sends never contaminate
+        # real cohort metrics.
+        decision_id = db.record_decision(
+            lead_id=lead_id,
+            action=email_variant,
+            action_value=asg["action_value"],
+            assignment_probability=asg["propensity"],
+            policy_name=asg["policy_name"],
+            policy_version=asg["policy_version"],
+            decision_key=f"dec_{lead_id}_{email_outreach_id}_0",
+            campaign_run_id=campaign_run_id,
+            outreach_id=email_outreach_id,
+            channel="email",
+            sequence_step=0,
+            decision_type="email_style",
+            segment_key=segment_key,
+            context={"company": enriched.get("company"), "title": enriched.get("title"),
+                     "is_simulated_exposure": sender_is_simulated},
+        )
+        send_result = sender_fn({"id": email_outreach_id, "subject": email_copy["subject"]})
+        send_success = bool(send_result.get("success")) if isinstance(send_result, dict) else bool(send_result)
+        send_simulated = sender_is_simulated or (isinstance(send_result, dict) and bool(send_result.get("simulated")))
+        if send_simulated and not sender_is_simulated:
+            # Keep provenance accurate if the sender declares a simulated result.
+            with db.engine.begin() as conn:
+                row = conn.execute(db.learning_decisions.select().where(db.learning_decisions.c.id == decision_id)).mappings().first()
+                ctx = dict(row.get("context_json") or {}) if row else {}
+                ctx["is_simulated_exposure"] = True
+                conn.execute(db.learning_decisions.update().where(db.learning_decisions.c.id == decision_id).values(context_json=ctx))
+        if send_success:
             db.update_outreach_status(email_outreach_id, "sent",
                                        sent_at=datetime.datetime.now(datetime.timezone.utc))
             db.record_event(lead_id, "email_sent", metadata=f"outreach_id={email_outreach_id}")
@@ -98,7 +139,9 @@ def run_pipeline(max_leads: int = 10, sender_fn=None) -> list[dict]:
             subject=None, body=linkedin_copy["message"],
             scheduled_for=datetime.datetime.now(datetime.timezone.utc), status="drafted",
         )
-        if sender_fn({"id": linkedin_outreach_id, "subject": "linkedin"}):
+        linkedin_result = sender_fn({"id": linkedin_outreach_id, "subject": "linkedin"})
+        linkedin_success = bool(linkedin_result.get("success")) if isinstance(linkedin_result, dict) else bool(linkedin_result)
+        if linkedin_success:
             db.update_outreach_status(linkedin_outreach_id, "sent",
                                        sent_at=datetime.datetime.now(datetime.timezone.utc))
             db.record_event(lead_id, "linkedin_sent", metadata=f"outreach_id={linkedin_outreach_id}")

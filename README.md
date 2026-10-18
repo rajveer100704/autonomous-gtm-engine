@@ -136,3 +136,17 @@ To validate chaos recovery:
 ```powershell
 python -m gtm_engine.chaos.chaos_test
 ```
+
+
+## V5 Outcome-Driven Feedback Loop
+
+V5 tracks first-touch email decisions against exact outreach IDs, accepts only explicitly attributed outcome records for learning, excludes simulated cohorts from real-data analysis, and evaluates mature sent exposures with confidence intervals and safety guardrails. Recommendations are advisory; validated promotion is an explicit operator action.
+
+Run the full suite from the repository root:
+
+```powershell
+python -m pytest gtm_engine/tests -q
+python -m gtm_engine.optimization.report --seed 20261019
+```
+
+Benchmark output is synthetic and must not be described as real-world uplift. The policy-quality benchmark is separate from infrastructure/queue throughput benchmarks. For attribution semantics and API routes, see [the GTM Engine README](gtm_engine/README.md#v5-outcome-driven-feedback-loop).

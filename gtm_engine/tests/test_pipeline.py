@@ -277,51 +277,40 @@ def test_variant_performance_computes_rates():
     assert performance["B"]["open_rate"] == 0.0
 
 
-def test_ab_test_does_not_promote_below_min_sample():
+def test_ab_test_does_not_promote_without_explicit_mature_attribution():
     from gtm_engine.agents import ab_test
 
-    run_pipeline(max_leads=2)  # far below MIN_SAMPLE_PER_VARIANT
+    run_pipeline(max_leads=4)
+    leads = db.all_leads()
+    # Legacy lead-only replies must remain descriptive and never be mapped to a variant.
+    for lead in leads:
+        db.record_event(lead["id"], "email_replied")
     decision = ab_test.evaluate_and_promote()
     assert decision["decided"] is False
-    assert db.get_active_winner() is None
+    assert db.get_validated_active_winner() is None
 
 
-def test_ab_test_promotes_clear_winner_with_enough_samples():
-    from gtm_engine.agents import ab_test
-
-    run_pipeline(max_leads=ab_test.MIN_SAMPLE_PER_VARIANT * 2 + 4)
-    leads = db.all_leads()
-    half = len(leads) // 2
-
-    with db.engine.begin() as conn:
-        for i, lead in enumerate(leads):
-            variant = "A" if i < half else "B"
-            conn.execute(
-                db.outreach.update()
-                .where(db.outreach.c.lead_id == lead["id"], db.outreach.c.sequence_step == 0,
-                       db.outreach.c.channel == "email")
-                .values(variant=variant)
-            )
-
-    # Variant A replies at a much higher rate than B, with plenty of samples.
-    for lead in leads[:half]:
-        db.record_event(lead["id"], "email_replied")
-
-    decision = ab_test.evaluate_and_promote()
-    assert decision["decided"] is True
-    assert decision["winner"] == "A"
-    assert db.get_active_winner()["variant"] == "A"
-
-
-def test_assign_variant_favors_promoted_winner():
+def test_assign_variant_ignores_unvalidated_legacy_winner():
     from gtm_engine.agents import ab_test
 
     db.init_db()
+    # Legacy writes remain visible for compatibility, but cannot change live traffic allocation.
     db.set_winner("A", "reply_rate", 0.5)
-    assignments = [ab_test.assign_variant() for _ in range(200)]
-    a_share = assignments.count("A") / len(assignments)
-    # Should be roughly EXPLOIT_WINNER_PROBABILITY (0.8), allow generous slack
-    assert a_share > 0.6, f"expected winner to dominate assignment, got {a_share}"
+    assignments = [ab_test.assign_variant_with_probability() for _ in range(300)]
+    assert {a["propensity"] for a in assignments} == {0.5}
+    assert all(a["policy_name"] == "global_best_v1" for a in assignments)
+
+
+def test_validated_promotion_changes_assignment_probability():
+    from gtm_engine.agents import ab_test
+
+    db.init_db()
+    db.record_validated_promotion("email_copy_v1", "A", "1.0", "test-evidence-key")
+    assignments = [ab_test.assign_variant_with_probability() for _ in range(300)]
+    assert all(a["propensity"] in (0.8, 0.2) for a in assignments)
+    assert assignments.count(next(a for a in assignments if a["variant"] == "A")) >= 0
+    a_share = sum(1 for a in assignments if a["variant"] == "A") / len(assignments)
+    assert a_share > 0.60, f"expected validated winner to be favored, got {a_share:.2f}"
 
 
 def test_research_carries_sources_and_confidence():

@@ -6,10 +6,11 @@ CRM data layer. Uses SQLAlchemy Core so the SAME code runs against:
 All agents talk to this module only — never raw SQL elsewhere.
 """
 import datetime
+import re
 
 from sqlalchemy import (
     create_engine, MetaData, Table, Column, Integer, String, Text, DateTime,
-    ForeignKey, select, update, JSON
+    ForeignKey, select, update, JSON, Float
 )
 
 from gtm_engine.config import settings
@@ -149,6 +150,58 @@ spans = Table(
     Column("success", Integer),      # 1/0 — sqlite/pg-portable boolean
     Column("error", Text, nullable=True),
     Column("created_at", DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)),
+)
+
+
+learning_decisions = Table(
+    "learning_decisions", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("decision_key", String, unique=True, index=True),
+    Column("lead_id", Integer, ForeignKey("leads.id")),
+    Column("outreach_id", Integer, ForeignKey("outreach.id"), unique=True, nullable=True),
+    Column("campaign_run_id", String, nullable=True),
+    Column("channel", String, default="email"),
+    Column("sequence_step", Integer, default=0),
+    Column("decision_type", String, default="email_style"),
+    Column("action", String),        # 'A' | 'B'
+    Column("action_value", String),  # 'direct' | 'curiosity'
+    Column("policy_name", String),   # 'randomized_baseline_v1', 'global_best_v1', 'segment_best_v1'
+    Column("policy_version", String, default="1.0"),
+    Column("assignment_probability", Float),  # 0 < p <= 1
+    Column("segment_key", String, default="all"),
+    Column("context_json", JSON, nullable=True),
+    Column("created_at", DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)),
+)
+
+
+learning_outcomes = Table(
+    "learning_outcomes", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("event_key", String, unique=True, index=True),
+    Column("decision_id", Integer, ForeignKey("learning_decisions.id"), nullable=False),
+    Column("outreach_id", Integer, ForeignKey("outreach.id"), nullable=False),
+    Column("lead_id", Integer, ForeignKey("leads.id"), nullable=False),
+    Column("event_type", String, nullable=False),
+    Column("occurred_at", DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)),
+    Column("recorded_at", DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)),
+    Column("source", String, default="provider_webhook"),
+    Column("is_simulated", Integer, default=0),
+    Column("value_numeric", Float, nullable=True),
+    Column("currency", String, nullable=True),
+    Column("metadata_json", JSON, nullable=True),
+)
+
+
+# Only promotions written through the evidence-backed V5 gate can influence live assignment.
+# The legacy ab_winner table remains for backward-compatible reporting.
+learning_promotions = Table(
+    "learning_promotions", metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("test_name", String, nullable=False),
+    Column("variant", String, nullable=False),
+    Column("policy_version", String, nullable=False),
+    Column("evidence_key", String, unique=True, index=True, nullable=False),
+    Column("decided_at", DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)),
 )
 
 
@@ -462,6 +515,33 @@ def set_winner(variant: str, metric: str, value: float, test_name: str = "email_
         ))
 
 
+
+def record_validated_promotion(test_name: str, variant: str, policy_version: str, evidence_key: str) -> bool:
+    """Persist a V5-gate-approved promotion idempotently; returns True if newly added."""
+    if variant not in ("A", "B"):
+        raise ValueError("variant must be A or B")
+    if not evidence_key:
+        raise ValueError("evidence_key is required")
+    with engine.begin() as conn:
+        existing = conn.execute(select(learning_promotions).where(learning_promotions.c.evidence_key == evidence_key)).mappings().first()
+        if existing:
+            if existing["test_name"] != test_name or existing["variant"] != variant:
+                raise ValueError("evidence_key reused for a different promotion")
+            return False
+        conn.execute(learning_promotions.insert().values(
+            test_name=test_name, variant=variant, policy_version=policy_version,
+            evidence_key=evidence_key, decided_at=datetime.datetime.now(datetime.timezone.utc)))
+        return True
+
+
+def get_validated_active_winner(test_name: str = "email_copy_v1"):
+    """Return only a winner recorded after passing the V5 evidence gate."""
+    with engine.begin() as conn:
+        row = conn.execute(select(learning_promotions).where(learning_promotions.c.test_name == test_name)
+                           .order_by(learning_promotions.c.id.desc())).mappings().first()
+    return dict(row) if row else None
+
+
 def record_span(trace_id: str, agent: str, duration_ms: int, success: bool,
                  error: str = None, lead_id: int = None):
     with engine.begin() as conn:
@@ -707,5 +787,345 @@ def campaign_analytics():
         "templates": template_stats,
         "industries": dict(sorted(industry_stats.items(), key=lambda x: x[1]["sourced"], reverse=True)[:5]),
         "personas": persona_stats,
+    }
+
+
+# ── V5 Outcome Learning & Explicit Attribution ─────────────────────────────
+SUPPORTED_OUTCOMES = {
+    "email_replied", "meeting_booked", "won", "lost",
+    "bounced", "unsubscribe", "email_opened"
+}
+
+
+def _ensure_utc(dt):
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.datetime.fromisoformat(dt)
+        except Exception:
+            return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc)
+
+
+
+def record_decision(
+    lead_id: int, action: str, action_value: str, assignment_probability: float,
+    policy_name: str, policy_version: str = "1.0", decision_key: str | None = None,
+    outreach_id: int | None = None, campaign_run_id: str | None = None,
+    channel: str = "email", sequence_step: int = 0, decision_type: str = "email_style",
+    segment_key: str = "all", context: dict | None = None,
+    created_at: datetime.datetime | None = None,
+) -> int:
+    """Persist a decision after outreach exists, with checked idempotency and ownership."""
+    if action not in ("A", "B"):
+        raise ValueError("action must be 'A' or 'B'")
+    if not (0.0 < float(assignment_probability) <= 1.0):
+        raise ValueError("assignment_probability must be in (0, 1]")
+    ctx = context or {}
+    if not isinstance(ctx, dict):
+        raise ValueError("context must be a dictionary")
+    if not decision_key:
+        decision_key = f"dec_{lead_id}_{channel}_{sequence_step}_{outreach_id if outreach_id is not None else 'pending'}"
+    ts = _ensure_utc(created_at) or datetime.datetime.now(datetime.timezone.utc)
+
+    with engine.begin() as conn:
+        lead = conn.execute(select(leads.c.id).where(leads.c.id == lead_id)).first()
+        if not lead:
+            raise ValueError(f"Lead ID {lead_id} not found")
+        existing = conn.execute(select(learning_decisions).where(learning_decisions.c.decision_key == decision_key)).mappings().first()
+        if existing:
+            same = (existing["lead_id"] == lead_id and existing["outreach_id"] == outreach_id
+                    and existing["action"] == action and existing["policy_name"] == policy_name)
+            if not same:
+                raise ValueError("decision_key was already used for a different decision")
+            return existing["id"]
+        outreach_row = None
+        if outreach_id is not None:
+            outreach_row = conn.execute(select(outreach).where(outreach.c.id == outreach_id)).mappings().first()
+            if not outreach_row:
+                raise ValueError(f"Outreach ID {outreach_id} not found")
+            if outreach_row["lead_id"] != lead_id:
+                raise ValueError("Decision lead_id does not match outreach owner")
+            if channel and outreach_row["channel"] != channel:
+                raise ValueError("Decision channel does not match outreach channel")
+            if sequence_step is not None and outreach_row["sequence_step"] != sequence_step:
+                raise ValueError("Decision sequence_step does not match outreach sequence_step")
+            if outreach_row["variant"] not in (None, action):
+                raise ValueError("Decision action does not match outreach variant")
+
+        if outreach_id is not None:
+            existing_outreach = conn.execute(select(learning_decisions).where(learning_decisions.c.outreach_id == outreach_id)).mappings().first()
+            if existing_outreach:
+                if existing_outreach["lead_id"] == lead_id and existing_outreach["action"] == action:
+                    return existing_outreach["id"]
+                raise ValueError("Outreach already has a different learning decision")
+
+        result = conn.execute(learning_decisions.insert().values(
+            decision_key=decision_key, lead_id=lead_id, outreach_id=outreach_id,
+            campaign_run_id=campaign_run_id, channel=channel, sequence_step=sequence_step,
+            decision_type=decision_type, action=action, action_value=action_value,
+            policy_name=policy_name, policy_version=policy_version,
+            assignment_probability=float(assignment_probability), segment_key=segment_key or "all",
+            context_json=ctx, created_at=ts,
+        ))
+        return result.inserted_primary_key[0]
+
+def get_decision(decision_id: int) -> dict | None:
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(learning_decisions).where(learning_decisions.c.id == decision_id)
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def get_decision_by_key(decision_key: str) -> dict | None:
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(learning_decisions).where(learning_decisions.c.decision_key == decision_key)
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def get_decision_for_outreach(outreach_id: int) -> dict | None:
+    with engine.begin() as conn:
+        row = conn.execute(
+            select(learning_decisions).where(learning_decisions.c.outreach_id == outreach_id)
+        ).mappings().first()
+        return dict(row) if row else None
+
+
+def all_learning_decisions() -> list[dict]:
+    with engine.begin() as conn:
+        rows = conn.execute(
+            select(learning_decisions).order_by(learning_decisions.c.id.asc())
+        ).mappings().all()
+        return [dict(r) for r in rows]
+
+
+
+def record_learning_outcome(
+    lead_id: int, outreach_id: int, decision_id: int, event_type: str,
+    event_key: str | None = None, occurred_at: datetime.datetime | None = None,
+    source: str = "provider_webhook", is_simulated: bool = False,
+    value_numeric: float | None = None, currency: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    """Record an idempotent outcome only against its exact decision/outreach pair."""
+    if event_type not in SUPPORTED_OUTCOMES:
+        raise ValueError(f"Unsupported outcome event_type: {event_type!r}")
+    occ_ts = _ensure_utc(occurred_at) or datetime.datetime.now(datetime.timezone.utc)
+    rec_ts = datetime.datetime.now(datetime.timezone.utc)
+    if not event_key:
+        # Outcome metrics are binary per decision/event type; a stable default avoids retry duplicates.
+        event_key = f"auto:{decision_id}:{event_type}"
+    with engine.begin() as conn:
+        out_row = conn.execute(select(outreach).where(outreach.c.id == outreach_id)).mappings().first()
+        dec_row = conn.execute(select(learning_decisions).where(learning_decisions.c.id == decision_id)).mappings().first()
+        if not out_row:
+            raise ValueError(f"Outreach ID {outreach_id} not found")
+        if not dec_row:
+            raise ValueError(f"Decision ID {decision_id} not found")
+        if out_row["lead_id"] != lead_id or dec_row["lead_id"] != lead_id:
+            raise ValueError("Cross-lead mismatch among lead, outreach, and decision")
+        if dec_row["outreach_id"] != outreach_id:
+            raise ValueError("Learning outcome must reference the decision's exact outreach")
+        if out_row["channel"] != "email" or out_row["sequence_step"] != 0 or dec_row["decision_type"] != "email_style":
+            raise ValueError("Outcome is not linked to an eligible first-touch email decision")
+        if out_row["status"] not in ("sent", "replied", "bounced") or out_row["sent_at"] is None:
+            raise ValueError("Outcome cannot be attributed to an outreach that was not actually marked sent")
+        existing = conn.execute(select(learning_outcomes).where(learning_outcomes.c.event_key == event_key)).mappings().first()
+        if existing:
+            same = (existing["decision_id"] == decision_id and existing["outreach_id"] == outreach_id
+                    and existing["lead_id"] == lead_id and existing["event_type"] == event_type)
+            if not same:
+                raise ValueError("event_key was already used for a different outcome")
+            return {"status": "duplicate", "outcome_id": existing["id"], "event_key": event_key,
+                    "event_type": existing["event_type"], "lead_id": lead_id,
+                    "outreach_id": outreach_id, "decision_id": decision_id}
+        res = conn.execute(learning_outcomes.insert().values(
+            event_key=event_key, decision_id=decision_id, outreach_id=outreach_id,
+            lead_id=lead_id, event_type=event_type, occurred_at=occ_ts, recorded_at=rec_ts,
+            source=source, is_simulated=1 if is_simulated else 0,
+            value_numeric=value_numeric, currency=currency, metadata_json=metadata or {},
+        ))
+        return {"status": "recorded", "outcome_id": res.inserted_primary_key[0], "event_key": event_key,
+                "event_type": event_type, "lead_id": lead_id, "outreach_id": outreach_id,
+                "decision_id": decision_id}
+
+def all_learning_outcomes(include_simulated: bool = False) -> list[dict]:
+    with engine.begin() as conn:
+        stmt = select(learning_outcomes).order_by(learning_outcomes.c.id.asc())
+        if not include_simulated:
+            stmt = stmt.where(learning_outcomes.c.is_simulated == 0)
+        rows = conn.execute(stmt).mappings().all()
+        return [dict(r) for r in rows]
+
+
+
+def get_attribution_dataset(
+    attribution_window_days: int = 14,
+    now: datetime.datetime | None = None,
+    include_simulated: bool = False,
+) -> dict:
+    """Build the authoritative, exact-link dataset; only in-window outcomes count."""
+    if attribution_window_days < 1:
+        raise ValueError("attribution_window_days must be >= 1")
+    ref_now = _ensure_utc(now) or datetime.datetime.now(datetime.timezone.utc)
+    window = datetime.timedelta(days=attribution_window_days)
+    with engine.begin() as conn:
+        decisions = [dict(r) for r in conn.execute(select(learning_decisions)).mappings().all()]
+        outreach_rows = {r["id"]: dict(r) for r in conn.execute(select(outreach)).mappings().all()}
+        outcomes = [dict(r) for r in conn.execute(select(learning_outcomes)).mappings().all()]
+        legacy_events = [dict(r) for r in conn.execute(select(events)).mappings().all()]
+
+    def is_simulated_decision(d):
+        ctx = d.get("context_json")
+        return bool(isinstance(ctx, dict) and (ctx.get("is_simulated_exposure") or ctx.get("simulated")))
+
+    decisions_by_id = {d["id"]: d for d in decisions}
+    valid_outcomes_by_decision: dict[int, list[dict]] = {}
+    valid_outcome_ids: set[int] = set()
+    validated_linked_outreach_ids: set[int] = set()
+    invalid_outcome_count = 0
+    for o in outcomes:
+        dec = decisions_by_id.get(o["decision_id"])
+        out = outreach_rows.get(o["outreach_id"])
+        if not dec or not out or dec.get("outreach_id") != o["outreach_id"] or dec.get("lead_id") != o["lead_id"] or out.get("lead_id") != o["lead_id"]:
+            invalid_outcome_count += 1
+            continue
+        sent_at = _ensure_utc(out.get("sent_at"))
+        occurred_at = _ensure_utc(o.get("occurred_at"))
+        if not sent_at or not occurred_at or occurred_at < sent_at or occurred_at > sent_at + window:
+            invalid_outcome_count += 1
+            continue
+        validated_linked_outreach_ids.add(o["outreach_id"])
+        decision_simulated = is_simulated_decision(dec)
+        # Keep synthetic and real cohorts separate; never blend their outcomes.
+        if include_simulated:
+            if not decision_simulated or not bool(o.get("is_simulated")):
+                continue
+        elif decision_simulated or bool(o.get("is_simulated")):
+            continue
+        valid_outcomes_by_decision.setdefault(dec["id"], []).append(o)
+        valid_outcome_ids.add(o["id"])
+
+    # General events with no trustworthy learning-outcome link remain excluded from learning.
+    attributed_outreach_ids = validated_linked_outreach_ids
+    unattributed_events_count = 0
+    for e in legacy_events:
+        if e.get("event_type") not in SUPPORTED_OUTCOMES:
+            continue
+        meta = e.get("event_metadata") or ""
+        is_attr = False
+        match = re.search(r"(?:^|[;\s])outreach_id=(\d+)(?:$|[;\s])", meta)
+        if match:
+            oid = int(match.group(1))
+            out = outreach_rows.get(oid)
+            is_attr = bool(out and out.get("lead_id") == e.get("lead_id") and oid in attributed_outreach_ids)
+        if not is_attr:
+            unattributed_events_count += 1
+
+    def new_bucket():
+        return {"eligible_sent": 0, "mature_sent": 0, "immature_sent": 0,
+                "replied": 0, "meetings": 0, "won": 0, "lost": 0,
+                "bounced": 0, "unsubscribed": 0, "opened": 0}
+    variant_stats = {"A": new_bucket(), "B": new_bucket()}
+    segment_stats: dict[str, dict[str, dict]] = {}
+    records = []
+    sent_exposures = mature_exposures = immature_exposures = 0
+    excluded_simulated_exposures = excluded_real_exposures = 0
+
+    for d in decisions:
+        action = d.get("action")
+        if action not in ("A", "B"):
+            continue
+        ctx = d.get("context_json")
+        simulated_decision = is_simulated_decision(d)
+        seg = d.get("segment_key") or "all"
+        oid = d.get("outreach_id")
+        out = outreach_rows.get(oid) if oid else None
+        sent_at = _ensure_utc(out.get("sent_at")) if out else None
+        eligible = bool(out and out.get("channel") == "email" and out.get("sequence_step") == 0
+                        and out.get("status") in ("sent", "replied", "bounced") and sent_at)
+        if not eligible:
+            continue
+        if simulated_decision != bool(include_simulated):
+            if simulated_decision:
+                excluded_simulated_exposures += 1
+            else:
+                excluded_real_exposures += 1
+            continue
+        segment_stats.setdefault(seg, {"A": new_bucket(), "B": new_bucket()})
+        sent_exposures += 1
+        bucket, segment_bucket = variant_stats[action], segment_stats[seg][action]
+        bucket["eligible_sent"] += 1
+        segment_bucket["eligible_sent"] += 1
+        is_mature = bool(sent_at and sent_at + window <= ref_now)
+        if is_mature:
+            mature_exposures += 1
+            bucket["mature_sent"] += 1
+            segment_bucket["mature_sent"] += 1
+        else:
+            immature_exposures += 1
+            bucket["immature_sent"] += 1
+            segment_bucket["immature_sent"] += 1
+
+        dec_outcomes = valid_outcomes_by_decision.get(d["id"], [])
+        flags = {
+            "replied": any(o["event_type"] == "email_replied" for o in dec_outcomes),
+            "meeting_booked": any(o["event_type"] == "meeting_booked" for o in dec_outcomes),
+            "won": any(o["event_type"] == "won" for o in dec_outcomes),
+            "lost": any(o["event_type"] == "lost" for o in dec_outcomes),
+            "bounced": any(o["event_type"] == "bounced" for o in dec_outcomes),
+            "unsubscribe": any(o["event_type"] == "unsubscribe" for o in dec_outcomes),
+            "opened": any(o["event_type"] == "email_opened" for o in dec_outcomes),
+        }
+        records.append({
+            "decision_id": d["id"], "decision_key": d["decision_key"], "lead_id": d["lead_id"],
+            "outreach_id": oid, "action": action, "action_value": d.get("action_value"),
+            "segment_key": seg, "policy_name": d.get("policy_name"),
+            "policy_version": d.get("policy_version"),
+            "assignment_probability": d.get("assignment_probability"),
+            "sent_at": sent_at.isoformat() if sent_at else None, "is_mature": is_mature,
+            "replied": int(flags["replied"]), "meeting_booked": int(flags["meeting_booked"]),
+            "won": int(flags["won"]), "lost": int(flags["lost"]),
+            "bounced": int(flags["bounced"]), "unsubscribe": int(flags["unsubscribe"]),
+            "opened": int(flags["opened"]), "is_simulated": simulated_decision,
+            "propensity_valid": not (isinstance(ctx, dict) and ctx.get("propensity_valid") is False),
+        })
+        if is_mature:
+            event_map = {"replied": "replied", "meeting_booked": "meetings", "won": "won",
+                         "lost": "lost", "bounced": "bounced", "unsubscribe": "unsubscribed", "opened": "opened"}
+            for flag, bucket_key in event_map.items():
+                if flags[flag]:
+                    bucket[bucket_key] += 1
+                    segment_bucket[bucket_key] += 1
+
+    warnings = []
+    if unattributed_events_count:
+        warnings.append(f"{unattributed_events_count} legacy events lack verified outreach attribution and were excluded.")
+    if immature_exposures:
+        warnings.append(f"{immature_exposures} exposures are inside the {attribution_window_days}-day maturity window and were excluded from mature metrics.")
+    if invalid_outcome_count:
+        warnings.append(f"{invalid_outcome_count} outcomes had invalid links or timestamps outside the attribution window and were excluded.")
+    if excluded_simulated_exposures:
+        warnings.append(f"{excluded_simulated_exposures} simulated exposures were excluded from real-data metrics.")
+    if excluded_real_exposures:
+        warnings.append(f"{excluded_real_exposures} real exposures were excluded from the synthetic-only cohort.")
+    selected_decision_count = sum(1 for d in decisions if is_simulated_decision(d) == bool(include_simulated))
+    return {
+        "attribution_window_days": attribution_window_days, "as_of_time": ref_now.isoformat(),
+        "total_decisions": selected_decision_count, "sent_exposures": sent_exposures,
+        "mature_exposures": mature_exposures, "immature_exposures": immature_exposures,
+        "excluded_simulated_exposures": excluded_simulated_exposures,
+        "excluded_real_exposures": excluded_real_exposures,
+        "attributed_outcomes_count": len(valid_outcome_ids),
+        "unattributed_events_count": unattributed_events_count,
+        "excluded_outcomes_invalid_or_outside_window": invalid_outcome_count,
+        "variant_stats": variant_stats, "segment_stats": segment_stats,
+        "data_quality_warnings": warnings, "records": records,
     }
 

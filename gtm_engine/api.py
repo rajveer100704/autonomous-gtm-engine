@@ -6,8 +6,9 @@ GET  /outreach       -> CRM outreach list (emails/LinkedIn drafted + scheduled)
 POST /run-followups  -> fires any due follow-ups (call this from a cron trigger)
 """
 from contextlib import asynccontextmanager
+import datetime
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -67,20 +68,28 @@ class RunCampaignRequest(BaseModel):
 
 class TrackEventRequest(BaseModel):
     lead_id: int
-    event_type: str  # email_opened | email_replied | meeting_booked | won | lost
+    event_type: str
     metadata: str = ""
-    reply_text: str = ""  # required for event_type == "email_replied" to trigger classification
+    reply_text: str = ""
+    outreach_id: int | None = None
+    decision_id: int | None = None
+    event_key: str | None = None
+    occurred_at: datetime.datetime | None = None
+    source: str = "provider_webhook"
+    is_simulated: bool = False
 
 
-def _dry_run_sender(outreach_row: dict) -> bool:
+def _dry_run_sender(outreach_row: dict) -> dict:
     """
     Placeholder transport: logs instead of actually sending. Swap for a real
     SendGrid/Gmail API call — see README 'Wiring real sends'. A real ESP
     integration would call POST /events/track (email_opened/email_replied)
     from its webhook once this is wired up for real.
     """
-    print(f"[DRY RUN SEND] outreach_id={outreach_row['id']} -> {outreach_row['subject']}")
-    return True
+    print(f"[DRY RUN SEND] outreach_id={outreach_row['id']} -> {outreach_row.get('subject')}")
+    return {"success": True, "simulated": True}
+
+_dry_run_sender.is_simulated = True
 
 
 @app.post("/run-campaign")
@@ -121,14 +130,64 @@ def run_followups():
 
 @app.post("/events/track")
 def track_event(req: TrackEventRequest):
-    """
-    Webhook receiver. Point your ESP's open/reply webhook (or a manual CRM
-    action for 'meeting_booked' / 'won') at this endpoint. If event_type is
-    'email_replied' and reply_text is provided, the reply is classified and
-    the lead's remaining follow-up sequence adapts automatically —
-    see agents/followup_agent.handle_reply.
-    """
-    db.record_event(req.lead_id, req.event_type, req.metadata)
+    """Record a general event and optionally a strictly attributed learning outcome."""
+    from gtm_engine.config import settings
+    lead = db.get_lead(req.lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+
+    learning_status = "unattributed_not_used_for_learning"
+    learning_result = None
+    resolved_outreach_id = req.outreach_id
+    resolved_decision_id = req.decision_id
+    should_attribute = (req.outreach_id is not None or req.decision_id is not None)
+
+    if should_attribute:
+        if resolved_decision_id is not None:
+            decision = db.get_decision(resolved_decision_id)
+            if not decision:
+                raise HTTPException(status_code=404, detail="Learning decision not found")
+            if decision["lead_id"] != req.lead_id:
+                raise HTTPException(status_code=400, detail="Decision does not belong to supplied lead")
+            if resolved_outreach_id is None:
+                resolved_outreach_id = decision.get("outreach_id")
+            elif decision.get("outreach_id") != resolved_outreach_id:
+                raise HTTPException(status_code=400, detail="Decision does not point to supplied outreach")
+        if resolved_outreach_id is None or resolved_decision_id is None:
+            if resolved_outreach_id is not None:
+                decision = db.get_decision_for_outreach(resolved_outreach_id)
+                if decision and decision["lead_id"] == req.lead_id:
+                    resolved_decision_id = decision["id"]
+            if resolved_outreach_id is None or resolved_decision_id is None:
+                raise HTTPException(status_code=400, detail="Explicit outreach_id and decision_id are required for learning attribution")
+        out = next((o for o in db.all_outreach() if o["id"] == resolved_outreach_id), None)
+        dec = db.get_decision(resolved_decision_id)
+        if not out or not dec:
+            raise HTTPException(status_code=404, detail="Outreach or decision not found")
+        if out["lead_id"] != req.lead_id or dec["lead_id"] != req.lead_id or dec["outreach_id"] != resolved_outreach_id:
+            raise HTTPException(status_code=400, detail="Lead, outreach, and decision identifiers do not match")
+        if req.event_type in db.SUPPORTED_OUTCOMES:
+            event_key = req.event_key or f"api:{resolved_decision_id}:{req.event_type}"
+            try:
+                learning_result = db.record_learning_outcome(
+                    lead_id=req.lead_id, outreach_id=resolved_outreach_id, decision_id=resolved_decision_id,
+                    event_type=req.event_type, event_key=event_key, occurred_at=req.occurred_at,
+                    source=req.source, is_simulated=(req.is_simulated or req.source in {"simulator", "test_fixture"}),
+                    metadata={"source": req.source} if req.source else {},
+                )
+                learning_status = learning_result["status"]
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        else:
+            learning_status = "event_type_not_used_for_learning"
+
+    # Preserve the legacy general event stream. Add an explicit link in metadata where trusted.
+    meta = req.metadata or ""
+    if resolved_outreach_id is not None:
+        suffix = f"outreach_id={resolved_outreach_id}"
+        if suffix not in meta:
+            meta = f"{meta};{suffix}" if meta else suffix
+    db.record_event(req.lead_id, req.event_type, meta)
 
     adaptive_result = None
     if req.event_type == "email_replied" and req.reply_text:
@@ -136,6 +195,7 @@ def track_event(req: TrackEventRequest):
 
     return {
         "status": "recorded", "lead_id": req.lead_id, "event_type": req.event_type,
+        "attribution_status": learning_status, "learning_outcome": learning_result,
         "adaptive_followup": adaptive_result,
     }
 
@@ -149,7 +209,8 @@ def analytics_replies():
 def analytics_ab_test():
     return {
         "performance": db.variant_performance(),
-        "active_winner": db.get_active_winner(),
+        "active_winner": db.get_validated_active_winner(),
+        "legacy_historical_winner": db.get_active_winner(),
     }
 
 
@@ -161,6 +222,35 @@ def evaluate_ab_test():
     thresholds. Safe to call repeatedly (idempotent no-op if no winner yet).
     """
     return ab_test.evaluate_and_promote()
+
+
+@app.get("/analytics/outcome-feedback")
+def analytics_outcome_feedback(attribution_window_days: int = Query(14, ge=1, le=365)):
+    from gtm_engine.optimization.feedback import OutcomeFeedbackService
+    return OutcomeFeedbackService.get_dataset_summary(attribution_window_days=attribution_window_days)
+
+
+@app.get("/optimization/recommendation")
+def optimization_recommendation(
+    segment: str = "all",
+    attribution_window_days: int = Query(14, ge=1, le=365),
+    include_simulated: bool = False,
+):
+    from gtm_engine.optimization.feedback import OutcomeFeedbackService
+    if include_simulated:
+        from gtm_engine.config import settings
+        if not settings.mock_mode:
+            raise HTTPException(status_code=400, detail="Simulated data is only available in mock mode")
+    return OutcomeFeedbackService.get_recommendation(
+        segment_key=segment, attribution_window_days=attribution_window_days,
+        include_simulated=include_simulated,
+    )
+
+
+@app.post("/optimization/evaluate")
+def optimization_evaluate(attribution_window_days: int = Query(14, ge=1, le=365)):
+    """Explicit operator action; evaluates real attributed data and never sends outreach."""
+    return ab_test.evaluate_and_promote(attribution_window_days=attribution_window_days)
 
 
 @app.get("/analytics/funnel")

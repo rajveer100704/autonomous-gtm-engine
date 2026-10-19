@@ -8,6 +8,7 @@ POST /run-followups  -> fires any due follow-ups (call this from a cron trigger)
 from contextlib import asynccontextmanager
 import datetime
 import hmac
+import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request, Header
 from fastapi.staticfiles import StaticFiles
@@ -285,10 +286,12 @@ def send_provider_test_email(
 ):
     """One-message staging smoke test; not a campaign endpoint.
 
-    Requires GTM_MOCK_MODE=false, ENABLE_PROVIDER_SENDS=true, an auth token, and
-    an exact recipient allowlist. Each attempt transitions the outreach to
-    'sending' before the network call to prevent accidental duplicate sends.
+    Requires GTM_ENVIRONMENT=staging, GTM_MOCK_MODE=false,
+    ENABLE_PROVIDER_SENDS=true, an auth token, and an exact recipient allowlist.
+    Each attempt transitions the outreach to 'sending' before the network call.
     """
+    if os.getenv("GTM_ENVIRONMENT", "").strip().lower() != "staging":
+        raise HTTPException(status_code=403, detail="Provider smoke sends are staging-only")
     from gtm_engine.config import settings
     if settings.mock_mode or not settings.enable_provider_sends:
         raise HTTPException(status_code=403, detail="Provider sending is disabled")
@@ -350,7 +353,8 @@ def readiness():
         with db.engine.connect() as conn:
             conn.exec_driver_sql("SELECT 1")
         return {"status": "ready", "database": "reachable",
-                "database_url_kind": "postgres" if "postgres" in str(db.engine.url) else "sqlite"}
+                "database_url_kind": "postgres" if "postgres" in str(db.engine.url) else "sqlite",
+                "environment": os.getenv("GTM_ENVIRONMENT", "unset").strip().lower()}
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Database is not ready") from exc
 

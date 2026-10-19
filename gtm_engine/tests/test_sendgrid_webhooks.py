@@ -118,6 +118,7 @@ def test_internal_event_route_requires_token_outside_mock_mode(monkeypatch):
 
 
 def test_one_message_provider_smoke_send_requires_auth_allowlist_and_exact_decision(monkeypatch):
+    monkeypatch.setenv("GTM_ENVIRONMENT", "staging")
     lead, outreach, decision, _ = make_exposure()
     # Reset status to draft to model a staging message that has not been sent.
     db.update_outreach_status(outreach, "drafted")
@@ -284,3 +285,19 @@ def test_crypto_verifier_checks_exact_raw_bytes_including_multipart_bytes(monkey
     ).decode("ascii")
     assert verify_signature(payload, signature, timestamp) is True
     assert verify_signature(payload + b"tampered", signature, timestamp) is False
+
+
+def test_provider_smoke_send_is_forbidden_outside_staging(monkeypatch):
+    monkeypatch.setenv("GTM_ENVIRONMENT", "production")
+    client = TestClient(api.app)
+    response = client.post("/provider/send-test", json={"outreach_id": 1, "decision_id": 1})
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Provider smoke sends are staging-only"
+
+
+def test_readiness_reports_environment(monkeypatch):
+    monkeypatch.setenv("GTM_ENVIRONMENT", "staging")
+    client = TestClient(api.app)
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json()["environment"] == "staging"

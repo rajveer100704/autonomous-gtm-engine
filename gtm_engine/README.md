@@ -1,149 +1,38 @@
-# Autonomous GTM Engine (Platform Edition)
+# GTM Engine Package Notes
 
-**An enterprise-grade, event-driven autonomous outreach engine built with LangGraph orchestration, event-sourced persistence, pluggable Redis execution queues, OpenTelemetry observability, and a cost-aware Goal Manager.**
-
----
-
-## What This Is
-
-An **Agentic GTM Operating System** — not a cold copy generator. The platform autonomously discovers leads, builds deep parallel company intelligence, decodes the optimal outreach strategy per lead, executes across communication channels, and maintains long-term memory of every interaction for future campaigns.
-
-## Why This Project?
-Modern outbound systems require more than just raw AI-generated outreach copy. To operate reliably at scale, they require robust workflow orchestration, decoupled task execution queues, persistent event-sourcing, strict evaluation checks, and comprehensive telemetry observability. This project demonstrates how these production-grade software engineering concerns can be elegantly unified into a modular, multi-agent enterprise platform.
-
----
-
-## 🚀 Key Capabilities
-
-| Category | Capability | Architectural Implementation |
-| :--- | :--- | :--- |
-| **AI Orchestration** | **LangGraph StateGraph** | Stateful multi-agent graph with SQLite checkpointing, recovery nodes, and conditional A/B split routing. |
-| | **Goal Manager Node** | Declarative campaign gate parsing objectives into structured schemas (Success Criteria, Constraints, Budget, Deadlines). |
-| | **Budget Manager** | Dynamic cost-aware routing (routing research/evals to cheap models, strategy/copy to best models). |
-| | **Evaluation Gate** | Two-stage quality control (deterministic validation + semantic scoring). |
-| **Platform Systems** | **Queue Provider (DI)** | Pluggable, lazy-loaded queue system supporting `SQLiteQueueAdapter` and `RedisQueueAdapter` backends. |
-| | **Worker Fleet** | Horizontally scalable async consumers with task heartbeats, crash recovery, and circuit breakers. |
-| | **Event Store** | Event Sourced append-only log tracing correlation and causation metadata across planners. |
-| **Observability** | **Full Traceability** | OpenTelemetry exporter wired to Jaeger, Prometheus scraping metrics, and pre-built Grafana dashboards. |
-| | **Audit Log Spans** | Structured immutable audit log utilizing spans to time and track execution costs. |
-| **Integrations** | **MCP Tool Registry** | Standardized tool capability catalog with schemas, timeout rules, permissions, and cost limits. |
-| | **Lead Memory** | Append-only lead memory storing past emails, classifications, and objection responses. |
-
----
-
-## 📈 Performance Benchmarks
-We built an automated performance benchmarking suite (`gtm_engine/benchmark/`) to measure throughput and latency under pressure.
-
-### SQLite Queue Throughput & Latency (Local Profile)
-- **Enqueue Throughput:** ~2,170 tasks/second
-- **Dequeue Throughput:** ~1,940 tasks/second
-- **Average Enqueue Latency:** 0.47 ms
-- **Average Dequeue Latency:** 0.46 ms
-- **Average Ack Latency:** < 0.01 ms
-
-#### Benchmark Environment
-- **CPU:** Intel Core i7-12700K (12 Cores, 20 Threads)
-- **RAM:** 32 GB DDR4
-- **Python Version:** 3.14.0
-- **SQLite Version:** 3.45.2
-- **Redis Version:** 7.2.4 (running in Docker Compose)
-- **Number of Workers:** 1 (local sync run for local adapter profiles)
-
----
-
-## 🛠️ System Architecture
-
-```
-                 API Gateway (FastAPI)
-                      │
-                      ▼
-                Goal Manager (Budget / Deadline Controls)
-                      │
-                      ▼
-                LangGraph Campaign Graph
-                      │
-                      ▼
-              MCP Tool Registry (Tool Schemas)
-                      │
-                      ▼
-            QueueProvider (DI Interface)
-                      │
-        ┌─────────────┴──────────────┐
-        ▼                            ▼
- SQLiteQueueAdapter        RedisQueueAdapter (Streams)
-        │                            │
-        └─────────────┬──────────────┘
-                      ▼
-                 Worker Fleet
-                      │
-         ┌────────────┴────────────┐
-         ▼                         ▼
-    Gmail Executor         LinkedIn Executor (Playwright)
-         │                         │
-         └────────────┬────────────┘
-                      ▼
-                Domain Events (Pub/Sub)
-                      │
-                      ▼
-                 Event Store (Event Sourcing)
-                      │
-         ┌────────────┼────────────┐
-         ▼            ▼            ▼
-      CRM        Analytics     Lead Memory
-                      │
-                      ▼
-             ObservabilityService (OTel)
-                      │
-                      ▼
-     Prometheus ──> Grafana ──> Jaeger Tracing
-```
-
----
-
-## 📁 Repository Structure
-
-```
-gtm_engine/
-├── agents/             # Goal Manager, Planner, Strategy, Evaluation, Calendar
-├── audit/              # Structured Immutable Audit logging
-├── benchmark/          # Throughput and Latency benchmarking suite
-├── chaos/              # Chaos simulation and worker recovery validation
-├── crm/                # SQL Schema, DB Engine, and CRM service operations
-├── docs/               # Architecture Decision Records (ADRs) and Diagrams
-├── events/             # Event Bus and Event Sourcing Event Store
-├── executors/          # Gmail API, LinkedIn Browser, and Search executors
-├── mcp/                # MCP Tool Registry and capability catalog
-├── observability/      # OpenTelemetry and Prometheus Metric exporters
-├── queues/             # Pluggable SQLite and Redis Stream Queue adapters
-├── utils/              # Feature flags, circuit breakers, and retry logic
-└── api.py              # FastAPI versioned routes, health, and metrics
-```
-
----
-
-## 🧪 Running the Test Suite
-Ensure all 87+ unit and platform tests are passing:
-```powershell
-python -m pytest -v
-```
-
-To run the automated performance benchmark suite:
-```powershell
-python -m gtm_engine.benchmark.report
-```
-
-To validate chaos recovery:
-```powershell
-python -m gtm_engine.chaos.chaos_test
-```
-
+See the [root README](../README.md) for the project overview, architecture, local setup, benchmarks, current validation status, and deployment runbook.
 
 ## V5 Outcome-Driven Feedback Loop
 
-V5 persists each first-touch email-style decision and its exact outreach ID, then records outcomes only when the outcome can be explicitly attributed to that decision. The default attribution window is 14 days; only eligible sent exposures that have reached the end of this window enter mature-cohort metrics. Lead-only legacy events remain available to funnel analytics but are not inferred onto a variant.
+V5 tracks first-touch email-style decisions against their exact outreach IDs. An outcome is eligible for learning only when it can be explicitly attributed to the same lead, outreach, and decision. Lead-only legacy events remain useful for funnel analytics but are not inferred onto an A/B variant.
 
-The primary metric is mature attributed email-reply rate. Meeting and win rates are reported separately; bounce and unsubscribe rates are safety guardrails. Promotion requires minimum sample sizes, a 95% Newcombe/Wilson difference interval excluding zero, a configurable practical lift, and safety checks. Recommendations are advisory; evaluation is an explicit operator action. Synthetic simulator outcomes are not real-world evidence and are excluded from production analysis by default.
+The default attribution window is 14 days. Only eligible sent exposures that have reached the end of that window enter mature-cohort comparisons. Mature attributed email-reply rate is the primary metric; meeting and win rates are reported separately, while bounce and unsubscribe rates act as safety guardrails.
 
-Run tests from the repository root with `python -m pytest gtm_engine/tests -q`. Run the deterministic local policy benchmark with `python -m gtm_engine.optimization.report --seed 20261019`. It writes `reports/outcome_feedback_benchmark.json` and `.md`; this policy-quality benchmark is separate from the queue throughput benchmark.
+Policy evaluation uses minimum sample sizes, confidence intervals, configurable practical-lift thresholds, and safety checks. Recommendations are advisory; promotion is an explicit operator action. Synthetic simulator outcomes are excluded from real-data analysis by default and are not evidence of real-world uplift.
 
-API surfaces: `GET /analytics/outcome-feedback`, `GET /optimization/recommendation`, and `POST /optimization/evaluate`. The existing `/events/track` request shape remains valid; learning attribution requires a verified outreach/decision link.
+## Outcome and provider events
+
+- Signed SendGrid Event Webhook endpoint: `POST /webhooks/sendgrid/events`.
+- Signed Inbound Parse reply endpoint: `POST /webhooks/sendgrid/inbound`.
+- Restricted one-message staging endpoint: `POST /provider/send-test`.
+- Readiness endpoint: `GET /health/ready`.
+- Feedback analytics: `GET /analytics/outcome-feedback`.
+- Read-only recommendation: `GET /optimization/recommendation`.
+- Explicit evaluation: `POST /optimization/evaluate`.
+
+Provider receipts are deduplicated by provider event identity. A `delivered` event is not treated as an email reply. Inbound replies must be tied to the original sent outreach and matching learning decision. Keep sending disabled until the live staging provider setup is complete.
+
+## Tests
+
+From the repository root:
+
+```powershell
+python -m pytest gtm_engine/tests -q
+python -m gtm_engine.optimization.report --seed 20261019
+```
+
+The PostgreSQL integration suite is `gtm_engine/tests/postgres_integration.py`. It requires `TEST_DATABASE_URL` to point to a disposable PostgreSQL database. Do not run it against production data. For the full command sequence and provider smoke test, see [`../PRODUCTION_VALIDATION_RUNBOOK.md`](../PRODUCTION_VALIDATION_RUNBOOK.md).
+
+## Validation status
+
+As of 19 October 2026, the recorded local run reports 135 tests passing and the separate PostgreSQL 16 integration suite reports 4 tests passing. GitHub Actions also passed the main suite and its PostgreSQL integration job for commit `3a47bc28bf8762322f55e0869203280164f112dd`. Live SendGrid delivery and inbound-reply validation remain pending. See the [root README](../README.md#deployment-and-live-validation-status) for the current limitations.

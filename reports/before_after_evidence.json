@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "suite": "autonomous_gtm_before_after_evidence",
+  "created_at_utc": "2026-10-31T01:32:26.118558+00:00",
+  "repository": {
+    "remote": "https://github.com/rajveer100704/autonomous-gtm-engine.git",
+    "branch": "feat/agent-task-evaluation",
+    "baseline_revision": "f4138f7805c8b1bfc6117a1dfe27022bfb379a11",
+    "updated_revision": null,
+    "updated_working_tree_dirty": true,
+    "updated_base_revision": "f4138f7805c8b1bfc6117a1dfe27022bfb379a11",
+    "updated_revision_note": "Feature changes were uncommitted at measurement time. The updated test run used the dirty working tree on this branch, based on the recorded base revision."
+  },
+  "environment": {
+    "python": "3.14.0",
+    "GTM_MOCK_MODE": "true",
+    "USE_REDIS": "false",
+    "USE_OTEL": "false"
+  },
+  "methodology": {
+    "command": "python -m pytest gtm_engine/tests -q --durations=20",
+    "order": [
+      "original baseline",
+      "updated feature branch"
+    ],
+    "runs_per_revision": 1,
+    "same_machine": true,
+    "timing_note": "Single sequential samples are descriptive and are not a statistically controlled performance benchmark."
+  },
+  "results": {
+    "baseline": {
+      "log_file": "C:\\Users\\BIT\\AppData\\Local\\Temp\\gtm-baseline-pytest.log",
+      "tests_passed": 135,
+      "tests_skipped": 0,
+      "warnings": 72,
+      "pytest_elapsed_seconds": 101.82,
+      "wall_clock_seconds": 115.32,
+      "slowest_tests": [
+        {
+          "seconds": 18.31,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_outcome_feedback.py::test_explicit_evaluation_promotes_with_strong_real_attributed_evidence_idempotently"
+        },
+        {
+          "seconds": 6.62,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_feedback_simulator.py::test_equal_effect_negative_control_does_not_force_policy_uplift"
+        },
+        {
+          "seconds": 2.87,
+          "phase": "setup",
+          "test": "gtm_engine/tests/test_agents_platform.py::test_execution_queue_enqueue_dequeue"
+        },
+        {
+          "seconds": 2.38,
+          "phase": "setup",
+          "test": "gtm_engine/tests/test_agents_platform.py::test_lead_memory_returns_empty_for_new_lead"
+        },
+        {
+          "seconds": 2.3,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_agents_platform.py::test_lead_memory_persists_and_appends"
+        }
+      ],
+      "exit_code": 0
+    },
+    "updated": {
+      "log_file": "C:\\Users\\BIT\\AppData\\Local\\Temp\\gtm-after-pytest.log",
+      "tests_passed": 137,
+      "tests_skipped": 0,
+      "warnings": 94,
+      "pytest_elapsed_seconds": 84.52,
+      "wall_clock_seconds": 91.7,
+      "slowest_tests": [
+        {
+          "seconds": 19.99,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_outcome_feedback.py::test_explicit_evaluation_promotes_with_strong_real_attributed_evidence_idempotently"
+        },
+        {
+          "seconds": 7.89,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_feedback_simulator.py::test_equal_effect_negative_control_does_not_force_policy_uplift"
+        },
+        {
+          "seconds": 2.82,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_pipeline.py::test_ab_test_does_not_promote_without_explicit_mature_attribution"
+        },
+        {
+          "seconds": 2.25,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_feedback_simulator.py::test_segment_policy_learns_heterogeneous_preferences_with_enough_training_data"
+        },
+        {
+          "seconds": 1.65,
+          "phase": "call",
+          "test": "gtm_engine/tests/test_feedback_simulator.py::test_report_has_seeded_positive_and_negative_controls"
+        }
+      ],
+      "exit_code": 0
+    },
+    "delta": {
+      "tests_passed": 2,
+      "warnings": 22,
+      "pytest_elapsed_seconds": -17.3,
+      "pytest_elapsed_percent": -16.99,
+      "wall_clock_seconds": -23.62,
+      "wall_clock_percent": -20.48
+    }
+  },
+  "agent_task_evaluation": {
+    "mode": "deterministic_mock",
+    "source_revision": "f4138f7805c8b1bfc6117a1dfe27022bfb379a11",
+    "working_tree_dirty_at_evaluation": true,
+    "scenario_count": 10,
+    "scenario_passed": 10,
+    "check_count": 46,
+    "checks_passed": 46,
+    "scenarios": [
+      {
+        "id": "campaign_planning",
+        "passed": true,
+        "description": "Campaign planner preserves the requested objective, lead cap, focus, ICP, and email channel."
+      },
+      {
+        "id": "goal_structure",
+        "passed": true,
+        "description": "Goal Manager creates an active goal with success criteria, constraints, budget, and deadline."
+      },
+      {
+        "id": "budget_aware_model_policy",
+        "passed": true,
+        "description": "BudgetManager selects task-tier models and falls back to Flash after the budget is exceeded."
+      },
+      {
+        "id": "personalized_email_generation",
+        "passed": true,
+        "description": "Email agent returns a populated draft with recipient/company context and resolved template placeholders."
+      },
+      {
+        "id": "email_quality_gate_approval",
+        "passed": true,
+        "description": "Evaluation gate approves a grounded, personalized email that satisfies hard checks and score threshold."
+      },
+      {
+        "id": "unsafe_email_rejection",
+        "passed": true,
+        "description": "Evaluation gate rejects a spam-trigger-heavy email at the deterministic hard-check stage."
+      },
+      {
+        "id": "unsubscribe_reply_classification",
+        "passed": true,
+        "description": "Reply classifier identifies an explicit opt-out as unsubscribe."
+      },
+      {
+        "id": "queue_idempotency",
+        "passed": true,
+        "description": "SQLite queue collapses repeated enqueue requests with the same idempotency key."
+      },
+      {
+        "id": "queue_retry_lifecycle",
+        "passed": true,
+        "description": "Queue moves a failed task back to pending and completes it on retry without creating another task."
+      },
+      {
+        "id": "retry_policy",
+        "passed": true,
+        "description": "Retry decorator retries transient timeouts but immediately propagates non-retryable errors."
+      }
+    ],
+    "limitations": [
+      "LLM responses use deterministic mock mode; live model or planning quality is not measured.",
+      "The email quality gate uses mock review heuristics, not an independent human review or recipient outcomes.",
+      "Queue scenarios use in-memory SQLite and sequential duplicate submissions; Redis behavior and concurrent enqueue races are not tested.",
+      "Retry checks validate classification and attempt counts with zero backoff; wall-clock backoff timing is not benchmarked.",
+      "Budget routing is tested as the BudgetManager policy; runtime model selection in the LLM client is not asserted by this suite.",
+      "LLM usage logging is suppressed in the evaluator to avoid writing evaluation traffic to the local CRM database."
+    ]
+  },
+  "interpretation": [
+    "Both baseline and updated test suites passed.",
+    "The updated branch adds two passing tests.",
+    "One timing comparison does not establish a performance improvement.",
+    "The evaluation uses deterministic mock responses and sequential SQLite tests; it does not establish live-provider quality or Redis concurrency safety.",
+    "The warning increase should be reviewed separately."
+  ]
+}

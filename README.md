@@ -118,6 +118,7 @@ gtm_engine/
 ├── chaos/              # Chaos simulation and recovery tests
 ├── crm/                # Database schema, persistence, and CRM operations
 ├── events/             # Event bus and event store
+├── evals/              # Deterministic agent-task evaluation scenarios and JSON reports
 ├── executors/          # Gmail, LinkedIn, and SendGrid sending adapters
 ├── mcp/                # MCP tool registry and capability schemas
 ├── observability/      # OpenTelemetry and Prometheus integration
@@ -191,6 +192,23 @@ Run chaos/recovery checks:
 ```powershell
 python -m gtm_engine.chaos.chaos_test
 ```
+
+Run the deterministic agent-task evaluation suite (mock mode only):
+
+```powershell
+$env:GTM_MOCK_MODE = "true"
+$env:USE_REDIS = "false"
+$env:USE_OTEL = "false"
+python -m gtm_engine.evals.agent_task_eval --output reports/agent_task_eval.json
+```
+
+The suite covers campaign planning, goal constraints, budget model-selection policy,
+email draft personalization, email quality approval/rejection, unsubscribe classification,
+queue idempotency, queue retry lifecycle, and transient-versus-permanent retry behavior.
+It uses mocked LLM responses and an isolated in-memory SQLite queue. Its results are
+functional regression evidence only—not live model quality, provider delivery, or
+real-world campaign outcomes.
+
 
 ### Recorded validation snapshot
 

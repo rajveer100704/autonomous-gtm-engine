@@ -1,0 +1,222 @@
+{
+  "created_at_utc": "2026-10-31T00:50:38.472689+00:00",
+  "environment": {
+    "mock_mode": true,
+    "python": "3.14.0"
+  },
+  "limitations": [
+    "LLM responses use deterministic mock mode; live model or planning quality is not measured.",
+    "The email quality gate uses mock review heuristics, not an independent human review or recipient outcomes.",
+    "Queue scenarios use in-memory SQLite and sequential duplicate submissions; Redis behavior and concurrent enqueue races are not tested.",
+    "Retry checks validate classification and attempt counts with zero backoff; wall-clock backoff timing is not benchmarked.",
+    "Budget routing is tested as the BudgetManager policy; runtime model selection in the LLM client is not asserted by this suite.",
+    "LLM usage logging is suppressed in the evaluator to avoid writing evaluation traffic to the local CRM database."
+  ],
+  "mode": "deterministic_mock",
+  "scenarios": [
+    {
+      "checks": {
+        "email_channel_available": true,
+        "focus_preserved": true,
+        "icp_titles_present": true,
+        "lead_limit_preserved": true,
+        "objective_preserved": true
+      },
+      "description": "Campaign planner preserves the requested objective, lead cap, focus, ICP, and email channel.",
+      "evidence": {
+        "channels": [
+          "email",
+          "linkedin"
+        ],
+        "focus": "Series A LegalTech companies with active sales hiring",
+        "max_leads": 3,
+        "objective": "Book 3 demos with VP Sales at LegalTech SaaS companies"
+      },
+      "id": "campaign_planning",
+      "passed": true
+    },
+    {
+      "checks": {
+        "budget_positive": true,
+        "constraints_present": true,
+        "deadline_present": true,
+        "objective_preserved": true,
+        "plan_created": true,
+        "success_criteria_present": true
+      },
+      "description": "Goal Manager creates an active goal with success criteria, constraints, budget, and deadline.",
+      "evidence": {
+        "budget_usd": 0.5,
+        "constraints": [
+          "No weekends",
+          "Max 3 follow-up attempts",
+          "Gmail delivery only"
+        ],
+        "deadline": "2026-11-07T00:50:38.269852+00:00",
+        "status": "active",
+        "success_criteria": "meeting_booked event captured"
+      },
+      "id": "goal_structure",
+      "passed": true
+    },
+    {
+      "checks": {
+        "budget_exhaustion_detected": true,
+        "evaluation_uses_flash": true,
+        "exhausted_budget_forces_flash": true,
+        "planning_uses_pro_under_budget": true,
+        "research_uses_flash": true
+      },
+      "description": "BudgetManager selects task-tier models and falls back to Flash after the budget is exceeded.",
+      "evidence": {
+        "exhausted_route": "gemini-2.5-flash",
+        "limit_usd": 0.1,
+        "spend_usd": 0.11,
+        "under_budget_routes": {
+          "evaluation": "gemini-2.5-flash",
+          "planning": "gemini-2.5-pro",
+          "research": "gemini-2.5-flash"
+        }
+      },
+      "id": "budget_aware_model_policy",
+      "passed": true
+    },
+    {
+      "checks": {
+        "body_nonempty": true,
+        "company_personalized": true,
+        "no_known_placeholders_left": true,
+        "recipient_personalized": true,
+        "subject_nonempty": true
+      },
+      "description": "Email agent returns a populated draft with recipient/company context and resolved template placeholders.",
+      "evidence": {
+        "body_word_count": 48,
+        "subject": "quick question about contract turnaround at Acme Legal",
+        "unresolved_placeholders": []
+      },
+      "id": "personalized_email_generation",
+      "passed": true
+    },
+    {
+      "checks": {
+        "draft_approved": true,
+        "hard_checks_pass": true,
+        "score_meets_threshold": true
+      },
+      "description": "Evaluation gate approves a grounded, personalized email that satisfies hard checks and score threshold.",
+      "evidence": {
+        "approved": true,
+        "combined_score": 8.8,
+        "hard_check_failures": [],
+        "threshold": 7.0
+      },
+      "id": "email_quality_gate_approval",
+      "passed": true
+    },
+    {
+      "checks": {
+        "draft_rejected": true,
+        "llm_review_skipped": true,
+        "spam_failure_recorded": true,
+        "spam_score_exceeds_limit": true
+      },
+      "description": "Evaluation gate rejects a spam-trigger-heavy email at the deterministic hard-check stage.",
+      "evidence": {
+        "approved": false,
+        "hard_check_failures": [
+          "high_spam_score:22.5"
+        ],
+        "llm_review_feedback": "Skipped \u2014 hard checks failed.",
+        "spam_score": 22.5
+      },
+      "id": "unsafe_email_rejection",
+      "passed": true
+    },
+    {
+      "checks": {
+        "confidence_returned": true,
+        "unsubscribe_detected": true
+      },
+      "description": "Reply classifier identifies an explicit opt-out as unsubscribe.",
+      "evidence": {
+        "classification": "unsubscribe",
+        "confidence": "medium"
+      },
+      "id": "unsubscribe_reply_classification",
+      "passed": true
+    },
+    {
+      "checks": {
+        "completed_once": true,
+        "dequeue_returns_original_task": true,
+        "duplicate_enqueue_returns_same_id": true,
+        "no_pending_duplicate": true,
+        "only_one_pending_task": true,
+        "post_completion_duplicate_collapsed": true,
+        "stable_idempotency_key": true
+      },
+      "description": "SQLite queue collapses repeated enqueue requests with the same idempotency key.",
+      "evidence": {
+        "duplicate_queue_id": 1,
+        "first_queue_id": 1,
+        "idempotency_key": "cdcc88d5b053f746e4e666e74e140f4f",
+        "queue_stats": {
+          "completed": 1
+        },
+        "repeated_queue_id": 1
+      },
+      "id": "queue_idempotency",
+      "passed": true
+    },
+    {
+      "checks": {
+        "failed_task_not_in_dlq_before_limit": true,
+        "first_attempt_dequeued": true,
+        "no_pending_task_after_completion": true,
+        "retry_preserves_incremented_count": true,
+        "retry_reaches_completed_state": true
+      },
+      "description": "Queue moves a failed task back to pending and completes it on retry without creating another task.",
+      "evidence": {
+        "dlq_ready_before_retry": 0,
+        "final_status": "completed",
+        "first_retry_count": 0,
+        "queue_id": 1,
+        "second_retry_count": 1
+      },
+      "id": "queue_retry_lifecycle",
+      "passed": true
+    },
+    {
+      "checks": {
+        "permanent_error_not_retried": true,
+        "permanent_error_propagated": true,
+        "transient_call_eventually_succeeds": true,
+        "transient_error_retried": true
+      },
+      "description": "Retry decorator retries transient timeouts but immediately propagates non-retryable errors.",
+      "evidence": {
+        "permanent_attempts": 1,
+        "permanent_error": "simulated non-retryable validation error",
+        "transient_attempts": 3,
+        "transient_result": "ok"
+      },
+      "id": "retry_policy",
+      "passed": true
+    }
+  ],
+  "schema_version": 1,
+  "source_revision": "f4138f7805c8b1bfc6117a1dfe27022bfb379a11",
+  "suite": "autonomous_gtm_agent_task_eval",
+  "summary": {
+    "check_count": 46,
+    "check_pass_rate": 1.0,
+    "checks_passed": 46,
+    "scenario_count": 10,
+    "scenario_failed": 0,
+    "scenario_pass_rate": 1.0,
+    "scenario_passed": 10
+  },
+  "working_tree_dirty": true
+}
